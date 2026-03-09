@@ -26,32 +26,37 @@ export default async function handler(req, res) {
     ? "\n\nÉVITE ces sujets déjà posés :\n" + alreadyAsked.slice(-20).map((q, i) => (i+1) + ". " + q).join("\n")
     : "";
 
-  const prompt = `Tu es un expert de la Bible. Génère exactement ${count} questions de quiz bibliques en français. Niveau : ${LEVEL_PROMPTS[levelId]}${avoidList}\n\nRéponds UNIQUEMENT avec un tableau JSON valide, sans texte avant ou après, sans backticks, sans markdown :\n[{"q":"Question ?","opts":["A","B","C","D"],"a":0,"exp":"Explication (Référence).","topic":"sujet"}]\n\n"a" = index de la bonne réponse (0, 1, 2 ou 3). Génère exactement ${count} objets dans le tableau.`;
+  const prompt = `Tu es un expert de la Bible. Génère exactement ${count} questions de quiz bibliques en français. Niveau : ${LEVEL_PROMPTS[levelId]}${avoidList}
+
+Réponds UNIQUEMENT avec un tableau JSON valide, sans texte avant ou après, sans backticks, sans markdown :
+[{"q":"Question ?","opts":["A","B","C","D"],"a":0,"exp":"Explication (Référence).","topic":"sujet"}]
+
+"a" = index de la bonne réponse (0, 1, 2 ou 3). Génère exactement ${count} objets dans le tableau.`;
 
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-
-    const response = await fetch(url, {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        "HTTP-Referer": "https://logoschallenge.vercel.app",
+        "X-Title": "LogosChallenge",
+      },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.8,
-          maxOutputTokens: 2000,
-          responseMimeType: "application/json",
-        },
+        model: "mistralai/mistral-7b-instruct:free",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.8,
+        max_tokens: 2000,
       }),
     });
 
     const data = await response.json();
     if (!response.ok) {
-      return res.status(500).json({ error: "Gemini API error", detail: JSON.stringify(data) });
+      return res.status(500).json({ error: "OpenRouter error", detail: JSON.stringify(data) });
     }
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const text = data.choices?.[0]?.message?.content || "";
     if (!text) {
-      return res.status(500).json({ error: "Réponse vide de Gemini", detail: JSON.stringify(data) });
+      return res.status(500).json({ error: "Réponse vide", detail: JSON.stringify(data) });
     }
     const clean = text.replace(/```json|```/g, "").trim();
     const questions = JSON.parse(clean);
