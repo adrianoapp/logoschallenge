@@ -43,7 +43,7 @@ Réponds UNIQUEMENT avec un tableau JSON valide, sans texte avant ou après, san
         "X-Title": "LogosChallenge",
       },
       body: JSON.stringify({
-        model: "mistralai/mistral-7b-instruct:free",
+       model: "meta-llama/llama-3.2-3b-instruct:free",
         messages: [{ role: "user", content: prompt }],
         temperature: 0.8,
         max_tokens: 2000,
