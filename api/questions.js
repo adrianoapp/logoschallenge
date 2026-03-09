@@ -25,7 +25,7 @@ export default async function handler(req, res) {
   const avoidList = alreadyAsked.length > 0
     ? "\n\nÉVITE ces sujets déjà posés :\n" + alreadyAsked.slice(-20).map((q, i) => (i+1) + ". " + q).join("\n")
     : "";
-
+gemini-2.0-flash
   const prompt = `Tu es un expert de la Bible. Génère exactement ${count} questions de quiz bibliques en français. Niveau : ${LEVEL_PROMPTS[levelId]}${avoidList}
 
 Réponds UNIQUEMENT avec un tableau JSON valide, sans texte avant ou après, sans backticks, sans markdown :
