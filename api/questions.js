@@ -25,13 +25,8 @@ export default async function handler(req, res) {
   const avoidList = alreadyAsked.length > 0
     ? "\n\nÉVITE ces sujets déjà posés :\n" + alreadyAsked.slice(-20).map((q, i) => (i+1) + ". " + q).join("\n")
     : "";
-gemini-2.0-flash
-  const prompt = `Tu es un expert de la Bible. Génère exactement ${count} questions de quiz bibliques en français. Niveau : ${LEVEL_PROMPTS[levelId]}${avoidList}
 
-Réponds UNIQUEMENT avec un tableau JSON valide, sans texte avant ou après, sans backticks, sans markdown :
-[{"q":"Question ?","opts":["A","B","C","D"],"a":0,"exp":"Explication (Référence).","topic":"sujet"}]
-
-"a" = index de la bonne réponse (0, 1, 2 ou 3). Génère exactement ${count} objets dans le tableau.`;
+  const prompt = `Tu es un expert de la Bible. Génère exactement ${count} questions de quiz bibliques en français. Niveau : ${LEVEL_PROMPTS[levelId]}${avoidList}\n\nRéponds UNIQUEMENT avec un tableau JSON valide, sans texte avant ou après, sans backticks, sans markdown :\n[{"q":"Question ?","opts":["A","B","C","D"],"a":0,"exp":"Explication (Référence).","topic":"sujet"}]\n\n"a" = index de la bonne réponse (0, 1, 2 ou 3). Génère exactement ${count} objets dans le tableau.`;
 
   try {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -51,16 +46,13 @@ Réponds UNIQUEMENT avec un tableau JSON valide, sans texte avant ou après, san
     });
 
     const data = await response.json();
-
     if (!response.ok) {
       return res.status(500).json({ error: "Gemini API error", detail: JSON.stringify(data) });
     }
-
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
     if (!text) {
       return res.status(500).json({ error: "Réponse vide de Gemini", detail: JSON.stringify(data) });
     }
-
     const clean = text.replace(/```json|```/g, "").trim();
     const questions = JSON.parse(clean);
     return res.status(200).json({ questions });
