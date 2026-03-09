@@ -1,11 +1,11 @@
 {
-  "functions": {
-    "api/questions.js": {
-      "memory": 256,
-      "maxDuration": 30
-    }
-  },
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+  "version": 2,
+  "builds": [
+    { "src": "api/questions.js", "use": "@vercel/node" },
+    { "src": "index.html", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/api/questions", "dest": "/api/questions.js" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
