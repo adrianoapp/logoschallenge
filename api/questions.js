@@ -43,7 +43,7 @@ Réponds UNIQUEMENT avec un tableau JSON valide, sans texte avant ou après, san
         "X-Title": "LogosChallenge",
       },
       body: JSON.stringify({
-    model: "google/gemini-flash-1.5-8b",
+    model: "google/gemini-2.0-flash-001",
         messages: [{ role: "user", content: prompt }],
         temperature: 0.8,
         max_tokens: 2000,
