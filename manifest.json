@@ -1,0 +1,36 @@
+{
+  "name": "LogosChallenge",
+  "short_name": "LogosChallenge",
+  "description": "Quiz biblique progressif — 6 niveaux, questions IA infinies, classement mondial",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#07071c",
+  "theme_color": "#FFD700",
+  "orientation": "portrait",
+  "lang": "fr",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["games", "education", "lifestyle"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Jouer maintenant",
+      "short_name": "Jouer",
+      "description": "Lancer le défi du jour",
+      "url": "/?action=play",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
