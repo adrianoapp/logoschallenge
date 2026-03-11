@@ -438,8 +438,15 @@ async function dbSaveScore(playerId, pseudo, dailyPts, totalPts, currentLevel) {
 // Load leaderboard
 async function dbGetLeaderboard() {
   const todayStr = today();
-  const all = await supaFetch("scores?select=pseudo,daily_points,total_points,current_level,last_played,streak,games_played,badges&order=total_points.desc&limit=20");
-  return (all || []).map(r => ({
+  // Fetch top 20 by DAILY points (only today's players)
+  const todayRows = await supaFetch(
+    `scores?select=pseudo,daily_points,total_points,current_level,last_played,streak,games_played,badges&last_played=eq.${todayStr}&order=daily_points.desc&limit=20`
+  );
+  // Fetch top 20 by TOTAL points (all time)
+  const totalRows = await supaFetch(
+    "scores?select=pseudo,daily_points,total_points,current_level,last_played,streak,games_played,badges&order=total_points.desc&limit=20"
+  );
+  const mapRow = (r) => ({
     pseudo: r.pseudo,
     todayPts: r.last_played === todayStr ? r.daily_points : 0,
     totalPts: r.total_points,
@@ -447,7 +454,11 @@ async function dbGetLeaderboard() {
     streak: r.streak || 0,
     gamesPlayed: r.games_played || 0,
     badges: r.badges ? JSON.parse(r.badges) : [],
-  }));
+  });
+  return {
+    today: (todayRows || []).map(mapRow),
+    total: (totalRows || []).map(mapRow),
+  };
 }
 
 // Load player progress
@@ -507,7 +518,8 @@ function LogosChallenge() {
   const [screen, setScreen]       = useState("home");
   const [player, setPlayer]       = useState(null);
   const [dailyProgress, setDailyProgress] = useState(freshDailyProgress());
-  const [leaderboard, setLeaderboard]     = useState([]);
+  const [lbToday, setLbToday]             = useState([]);
+  const [lbTotal, setLbTotal]             = useState([]);
   const [lbTab, setLbTab]         = useState("today");
   const [pseudo, setPseudo]       = useState("");
   const [countdown, setCountdown] = useState(timeUntilMidnight());
@@ -555,7 +567,8 @@ function LogosChallenge() {
     setLbLoading(true);
     try {
       const lb = await dbGetLeaderboard();
-      setLeaderboard(lb);
+      setLbToday(lb.today || []);
+      setLbTotal(lb.total || []);
     } catch(e) {}
     setLbLoading(false);
   }, []);
@@ -1380,7 +1393,7 @@ function LogosChallenge() {
   const dp = dailyProgress;
   const todayLb   = [...leaderboard].sort((a,b) => b.todayPts  - a.todayPts);
   const totalLb   = [...leaderboard].sort((a,b) => b.totalPts  - a.totalPts);
-  const displayLb = lbTab === "today" ? todayLb : totalLb;
+  const displayLb = lbTab === "today" ? lbToday : lbTotal;
 
   return (
     <div style={S.app}>
@@ -1502,7 +1515,7 @@ function LogosChallenge() {
           </button>
         </div>
 
-        {lbLoading && leaderboard.length === 0 ? (
+        {lbLoading && lbToday.length === 0 && lbTotal.length === 0 ? (
           <div style={{textAlign:"center",padding:"20px",color:"#444",fontSize:13}}>{t.loadingLb}</div>
         ) : displayLb.length === 0 ? (
           <div style={{textAlign:"center",padding:"20px",color:"#444",fontSize:13}}>{t.noPlayers}</div>
