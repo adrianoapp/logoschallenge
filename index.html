@@ -105,13 +105,36 @@ async function supaFetch(path, method = "GET", body = null) {
 }
 
 // Get or create player by pseudo
-async function dbGetOrCreatePlayer(pseudo) {
+async function dbGetOrCreatePlayer(pseudo, referredBy = null) {
   // Check if exists
   const existing = await supaFetch(`players?pseudo=eq.${encodeURIComponent(pseudo)}&select=*`);
   if (existing && existing.length > 0) return existing[0];
   // Create new
-  const created = await supaFetch("players", "POST", { pseudo });
-  return Array.isArray(created) ? created[0] : null;
+  const created = await supaFetch("players", "POST", { pseudo, referred_by: referredBy });
+  const newPlayer = Array.isArray(created) ? created[0] : null;
+  // Give +10 pts bonus to referrer
+  if (newPlayer && referredBy) {
+    try {
+      const refPlayers = await supaFetch(`players?pseudo=eq.${encodeURIComponent(referredBy)}&select=id`);
+      if (refPlayers && refPlayers.length > 0) {
+        const refId = refPlayers[0].id;
+        const refScore = await supaFetch(`scores?player_id=eq.${refId}&select=*`);
+        if (refScore && refScore.length > 0) {
+          const rs = refScore[0];
+          await supaFetch(`scores?player_id=eq.${refId}`, "PATCH", {
+            total_points: (rs.total_points || 0) + 10,
+            referral_count: (rs.referral_count || 0) + 1,
+          });
+        }
+      }
+    } catch(e) {}
+  }
+  return newPlayer;
+}
+
+async function dbGetReferralCount(playerId) {
+  const rows = await supaFetch(`scores?player_id=eq.${playerId}&select=referral_count`);
+  return rows && rows.length > 0 ? (rows[0].referral_count || 0) : 0;
 }
 
 // Get player score row
@@ -239,8 +262,12 @@ function LogosChallenge() {
   const [lbTab, setLbTab]         = useState("today");
   const [pseudo, setPseudo]       = useState("");
   const [countdown, setCountdown] = useState(timeUntilMidnight());
-  const [lbLoading, setLbLoading] = useState(true);
-  const [saving, setSaving]       = useState(false);
+  const [lbLoading, setLbLoading]   = useState(true);
+  const [saving, setSaving]         = useState(false);
+  const [referralCount, setReferralCount] = useState(0);
+  const [showShare, setShowShare]   = useState(false);
+  // Read referrer from URL
+  const urlRef = new URLSearchParams(window.location.search).get("ref") || null;
   const [playerStreak, setPlayerStreak]   = useState(0);
   const [playerBadges, setPlayerBadges]   = useState([]);
   const [newBadge, setNewBadge]           = useState(null);
@@ -462,7 +489,7 @@ function LogosChallenge() {
     if (!pseudo.trim()) return;
     const pseudoTrimmed = pseudo.trim();
     try {
-      const p = await dbGetOrCreatePlayer(pseudoTrimmed);
+      const p = await dbGetOrCreatePlayer(pseudoTrimmed, urlRef);
       if (!p) throw new Error("Erreur création joueur");
 
       // Load existing progress
@@ -483,6 +510,11 @@ function LogosChallenge() {
         setPlayerStreak(progress.streak || 0);
         setPlayerBadges(progress.badges || []);
       }
+      // Load referral count
+      try {
+        const rc = await dbGetReferralCount(p.id);
+        setReferralCount(rc);
+      } catch(e) {}
       setScreen("home");
     } catch(e) {
       alert("Erreur : " + e.message);
@@ -819,6 +851,74 @@ function LogosChallenge() {
     );
   }
 
+  // SHARE SCREEN
+  // ─────────────────────────────────────────────────────────
+  if (showShare) {
+    const shareLink = `https://logoschallenge.vercel.app${player ? "?ref="+encodeURIComponent(player.pseudo) : ""}`;
+    const whatsappMsg = encodeURIComponent(
+      `🎮 Je joue à *LogosChallenge* — le quiz biblique avec des questions IA infinies !\n\n` +
+      `📖 6 niveaux progressifs, classement mondial, verset du jour...\n\n` +
+      `👉 Rejoins-moi ici : ${shareLink}\n\n` +
+      `✝️ _"Ta parole est une lampe à mes pieds"_`
+    );
+    const whatsappUrl = `https://wa.me/?text=${whatsappMsg}`;
+    return (
+      <div style={S.app}>
+        <style>{`*{box-sizing:border-box}`}</style>
+        <div style={S.glow}/>
+        <nav style={S.nav}>
+          <button style={{background:"none",border:"none",color:gold,fontSize:16,cursor:"pointer",fontFamily:"inherit",padding:"8px 0"}} onClick={()=>setShowShare(false)}>← Retour</button>
+          <span style={{...S.navT, fontSize:15}}>📲 Inviter des amis</span>
+          <div style={{width:60}}/>
+        </nav>
+        <div style={{padding:"20px 16px"}}>
+
+          {/* Stats parrainage */}
+          <div style={{textAlign:"center", marginBottom:24, background:"rgba(255,215,0,0.05)", border:"1px solid rgba(255,215,0,0.2)", borderRadius:18, padding:"24px 16px"}}>
+            <div style={{fontSize:52, marginBottom:8}}>🤝</div>
+            <div style={{fontSize:13, color:gold, letterSpacing:2, textTransform:"uppercase", marginBottom:6}}>Ton impact</div>
+            <div style={{fontSize:48, fontWeight:700, color:gold}}>{referralCount}</div>
+            <div style={{fontSize:13, color:"#888", marginBottom:12}}>
+              {referralCount === 0 ? "personne invitée pour l'instant" : referralCount === 1 ? "ami a rejoint grâce à toi 🎉" : "amis ont rejoint grâce à toi 🎉"}
+            </div>
+            <div style={{fontSize:13, color:"#7EC8A4", fontWeight:700}}>
+              +{referralCount * 10} pts bonus gagnés 💰
+            </div>
+          </div>
+
+          {/* Lien unique */}
+          <div style={{background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:14, padding:"16px", marginBottom:16}}>
+            <div style={{fontSize:11, color:"#555", letterSpacing:2, textTransform:"uppercase", marginBottom:8}}>Ton lien unique</div>
+            <div style={{fontFamily:"monospace", fontSize:12, color:"#C4A6FF", wordBreak:"break-all", marginBottom:12, background:"rgba(155,127,212,0.08)", padding:"10px 12px", borderRadius:10}}>
+              {shareLink}
+            </div>
+            <button style={{...S.ghstB, marginBottom:0, fontSize:12}} onClick={()=>{navigator.clipboard.writeText(shareLink).catch(()=>{}); alert("Lien copié ! 📋")}}>
+              📋 Copier le lien
+            </button>
+          </div>
+
+          {/* WhatsApp button */}
+          <a href={whatsappUrl} target="_blank" rel="noopener" style={{display:"block", textDecoration:"none"}}>
+            <button style={{...S.primB, marginBottom:12, background:"linear-gradient(135deg,#128C7E,#25D366)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center", gap:10}}>
+              <span style={{fontSize:22}}>💬</span> Partager sur WhatsApp
+            </button>
+          </a>
+
+          {/* How it works */}
+          <div style={{background:"rgba(255,215,0,0.04)", border:"1px solid rgba(255,215,0,0.1)", borderRadius:14, padding:"16px"}}>
+            <div style={{fontSize:12, color:gold, fontWeight:700, marginBottom:12}}>💡 Comment ça marche ?</div>
+            <div style={{fontSize:13, color:"#888", lineHeight:1.8}}>
+              1️⃣ Partage ton lien unique sur WhatsApp<br/>
+              2️⃣ Ton ami clique et crée son compte<br/>
+              3️⃣ Tu reçois automatiquement <strong style={{color:gold}}>+10 points</strong> 🎁<br/>
+              4️⃣ Pas de limite — invite autant d'amis que tu veux !
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // BADGES SCREEN
   // ─────────────────────────────────────────────────────────
   if (showBadges) {
@@ -920,6 +1020,74 @@ function LogosChallenge() {
     );
   }
 
+  // SHARE SCREEN
+  // ─────────────────────────────────────────────────────────
+  if (showShare) {
+    const shareLink = `https://logoschallenge.vercel.app${player ? "?ref="+encodeURIComponent(player.pseudo) : ""}`;
+    const whatsappMsg = encodeURIComponent(
+      `🎮 Je joue à *LogosChallenge* — le quiz biblique avec des questions IA infinies !\n\n` +
+      `📖 6 niveaux progressifs, classement mondial, verset du jour...\n\n` +
+      `👉 Rejoins-moi ici : ${shareLink}\n\n` +
+      `✝️ _"Ta parole est une lampe à mes pieds"_`
+    );
+    const whatsappUrl = `https://wa.me/?text=${whatsappMsg}`;
+    return (
+      <div style={S.app}>
+        <style>{`*{box-sizing:border-box}`}</style>
+        <div style={S.glow}/>
+        <nav style={S.nav}>
+          <button style={{background:"none",border:"none",color:gold,fontSize:16,cursor:"pointer",fontFamily:"inherit",padding:"8px 0"}} onClick={()=>setShowShare(false)}>← Retour</button>
+          <span style={{...S.navT, fontSize:15}}>📲 Inviter des amis</span>
+          <div style={{width:60}}/>
+        </nav>
+        <div style={{padding:"20px 16px"}}>
+
+          {/* Stats parrainage */}
+          <div style={{textAlign:"center", marginBottom:24, background:"rgba(255,215,0,0.05)", border:"1px solid rgba(255,215,0,0.2)", borderRadius:18, padding:"24px 16px"}}>
+            <div style={{fontSize:52, marginBottom:8}}>🤝</div>
+            <div style={{fontSize:13, color:gold, letterSpacing:2, textTransform:"uppercase", marginBottom:6}}>Ton impact</div>
+            <div style={{fontSize:48, fontWeight:700, color:gold}}>{referralCount}</div>
+            <div style={{fontSize:13, color:"#888", marginBottom:12}}>
+              {referralCount === 0 ? "personne invitée pour l'instant" : referralCount === 1 ? "ami a rejoint grâce à toi 🎉" : "amis ont rejoint grâce à toi 🎉"}
+            </div>
+            <div style={{fontSize:13, color:"#7EC8A4", fontWeight:700}}>
+              +{referralCount * 10} pts bonus gagnés 💰
+            </div>
+          </div>
+
+          {/* Lien unique */}
+          <div style={{background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:14, padding:"16px", marginBottom:16}}>
+            <div style={{fontSize:11, color:"#555", letterSpacing:2, textTransform:"uppercase", marginBottom:8}}>Ton lien unique</div>
+            <div style={{fontFamily:"monospace", fontSize:12, color:"#C4A6FF", wordBreak:"break-all", marginBottom:12, background:"rgba(155,127,212,0.08)", padding:"10px 12px", borderRadius:10}}>
+              {shareLink}
+            </div>
+            <button style={{...S.ghstB, marginBottom:0, fontSize:12}} onClick={()=>{navigator.clipboard.writeText(shareLink).catch(()=>{}); alert("Lien copié ! 📋")}}>
+              📋 Copier le lien
+            </button>
+          </div>
+
+          {/* WhatsApp button */}
+          <a href={whatsappUrl} target="_blank" rel="noopener" style={{display:"block", textDecoration:"none"}}>
+            <button style={{...S.primB, marginBottom:12, background:"linear-gradient(135deg,#128C7E,#25D366)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center", gap:10}}>
+              <span style={{fontSize:22}}>💬</span> Partager sur WhatsApp
+            </button>
+          </a>
+
+          {/* How it works */}
+          <div style={{background:"rgba(255,215,0,0.04)", border:"1px solid rgba(255,215,0,0.1)", borderRadius:14, padding:"16px"}}>
+            <div style={{fontSize:12, color:gold, fontWeight:700, marginBottom:12}}>💡 Comment ça marche ?</div>
+            <div style={{fontSize:13, color:"#888", lineHeight:1.8}}>
+              1️⃣ Partage ton lien unique sur WhatsApp<br/>
+              2️⃣ Ton ami clique et crée son compte<br/>
+              3️⃣ Tu reçois automatiquement <strong style={{color:gold}}>+10 points</strong> 🎁<br/>
+              4️⃣ Pas de limite — invite autant d'amis que tu veux !
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // BADGES SCREEN
   // ─────────────────────────────────────────────────────────
   if (showBadges) {
@@ -997,6 +1165,31 @@ function LogosChallenge() {
           ✨ Questions infinies générées par IA · Jamais la même question deux fois
         </div>
       </div>
+
+      {/* SHARE BUTTON — visible to logged-in players */}
+      {player && (
+        <div style={{margin:"12px 16px 0", display:"flex", gap:10}}>
+          <button onClick={()=>setShowShare(true)} style={{flex:1, background:"linear-gradient(135deg,#0a5c52,#128C7E)", border:"1px solid rgba(37,211,102,0.3)", borderRadius:14, padding:"12px 16px", color:"#FFF", cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:8}}>
+            <span style={{fontSize:20}}>💬</span>
+            <div style={{textAlign:"left"}}>
+              <div style={{fontSize:13, fontWeight:700}}>Inviter sur WhatsApp</div>
+              <div style={{fontSize:10, color:"rgba(255,255,255,0.6)"}}>+10 pts par ami · {referralCount} invité{referralCount !== 1 ? "s" : ""}</div>
+            </div>
+          </button>
+        </div>
+      )}
+
+      {player && (
+        <div style={{margin:"12px 16px 0", display:"flex", gap:10}}>
+          <button onClick={()=>setShowShare(true)} style={{flex:1, background:"linear-gradient(135deg,#0a5c52,#128C7E)", border:"1px solid rgba(37,211,102,0.3)", borderRadius:14, padding:"12px 16px", color:"#FFF", cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:8}}>
+            <span style={{fontSize:20}}>💬</span>
+            <div style={{textAlign:"left"}}>
+              <div style={{fontSize:13, fontWeight:700}}>Inviter sur WhatsApp</div>
+              <div style={{fontSize:10, color:"rgba(255,255,255,0.6)"}}>+10 pts par ami · {referralCount} invité{referralCount!==1?"s":""}</div>
+            </div>
+          </button>
+        </div>
+      )}
 
       <div style={S.secT}>📅 Défi du Jour</div>
       <div style={S.pathW}>
