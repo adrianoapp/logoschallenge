@@ -1064,7 +1064,7 @@ function LogosChallenge() {
             setAskedTopics([]);
             startLevel(activeLevel); 
           }}>
-            🔄 Réessayer maintenant →
+            {t.retryNow}
           </button>
           <button style={S.ghstB} onClick={()=>setScreen("home")}>{t.backHome}</button>
         </div>
@@ -1084,7 +1084,7 @@ function LogosChallenge() {
         <div style={S.glow}/>
         <div style={S.lcCard}>
           <span style={{fontSize:52, marginBottom:12, display:"block"}}>🔒</span>
-          <h2 style={{...S.lcTit, color:"#888"}}>Niveau {activeLevel} {lang==="fr" ? "{lang==="fr" ? "bloqué pour aujourd'hui" : "blocked for today"}" : "blocked for today"}</h2>
+          <h2 style={{...S.lcTit, color:"#888"}}>{lang==="fr" ? "Niveau" : "Level"} {activeLevel} {t.blockedTitle}</h2>
           <div style={S.lcStat}>
             <div><span style={S.lcN}>{correct}</span><span style={S.lcL}>{t.correctAnswers}</span></div>
             <div><span style={S.lcN}>{lvl.minToPass}</span><span style={S.lcL}>Minimum requis</span></div>
@@ -1228,7 +1228,7 @@ function LogosChallenge() {
             setAskedTopics([]);
             startLevel(activeLevel); 
           }}>
-            🔄 Réessayer maintenant →
+            {t.retryNow}
           </button>
           <button style={S.ghstB} onClick={()=>setScreen("home")}>{t.backHome}</button>
         </div>
@@ -1248,7 +1248,7 @@ function LogosChallenge() {
         <div style={S.glow}/>
         <div style={S.lcCard}>
           <span style={{fontSize:52, marginBottom:12, display:"block"}}>🔒</span>
-          <h2 style={{...S.lcTit, color:"#888"}}>Niveau {activeLevel} bloqué<br/>pour aujourd'hui</h2>
+          <h2 style={{...S.lcTit, color:"#888"}}>{lang==="fr" ? "Niveau" : "Level"} {activeLevel} {t.blockedTitle}</h2>
           <div style={S.lcStat}>
             <div><span style={S.lcN}>{correct}</span><span style={S.lcL}>{t.correctAnswers}</span></div>
             <div><span style={S.lcN}>{lvl.minToPass}</span><span style={S.lcL}>Minimum requis</span></div>
