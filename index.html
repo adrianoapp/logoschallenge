@@ -33,6 +33,54 @@ const LEVELS = [
 ];
 
 // ─────────────────────────────────────────────────────────────
+// BADGES
+// ─────────────────────────────────────────────────────────────
+const BADGES = [
+  { id:"first_game",   emoji:"🕊️",  name:"Premier Pas",        desc:"Première partie jouée",              condition: s => s.gamesPlayed >= 1 },
+  { id:"streak3",      emoji:"🔥",  name:"Fidèle 3 jours",     desc:"3 jours consécutifs",                condition: s => s.streak >= 3 },
+  { id:"streak7",      emoji:"⛪",  name:"Serviteur Fidèle",   desc:"7 jours consécutifs",                condition: s => s.streak >= 7 },
+  { id:"streak30",     emoji:"✝️",  name:"Gardien de la Parole",desc:"30 jours consécutifs",              condition: s => s.streak >= 30 },
+  { id:"pts100",       emoji:"📖",  name:"Apprenti Scribe",    desc:"100 points cumulés",                 condition: s => s.totalPoints >= 100 },
+  { id:"pts500",       emoji:"⭐",  name:"Lumière des Nations", desc:"500 points cumulés",                condition: s => s.totalPoints >= 500 },
+  { id:"pts2000",      emoji:"👑",  name:"Saint des Saints",   desc:"2000 points cumulés",                condition: s => s.totalPoints >= 2000 },
+  { id:"level6",       emoji:"🏆",  name:"Maître des Écritures",desc:"Niveau 6 atteint",                  condition: s => s.highestLevel >= 6 },
+  { id:"games10",      emoji:"🌿",  name:"Disciple Assidu",    desc:"10 parties jouées",                  condition: s => s.gamesPlayed >= 10 },
+  { id:"games50",      emoji:"🔑",  name:"Clé du Royaume",     desc:"50 parties jouées",                  condition: s => s.gamesPlayed >= 50 },
+];
+
+// ─────────────────────────────────────────────────────────────
+// VERSETS DU JOUR (tournent selon le jour de l'année)
+// ─────────────────────────────────────────────────────────────
+const VERSETS = [
+  { ref:"Jean 3:16",        text:"Car Dieu a tant aimé le monde qu'il a donné son Fils unique." },
+  { ref:"Psaume 119:105",   text:"Ta parole est une lampe à mes pieds et une lumière sur mon sentier." },
+  { ref:"Philippiens 4:13", text:"Je puis tout par celui qui me fortifie." },
+  { ref:"Josué 1:9",        text:"Sois fort et courageux ! Ne te décourage pas, car l'Éternel ton Dieu est avec toi." },
+  { ref:"Jérémie 29:11",    text:"Je connais les projets que j'ai formés pour vous, des projets de paix et non de malheur." },
+  { ref:"Matthieu 5:16",    text:"Que votre lumière brille ainsi devant les hommes, afin qu'ils voient vos bonnes œuvres." },
+  { ref:"Romains 8:28",     text:"Nous savons que toutes choses concourent au bien de ceux qui aiment Dieu." },
+  { ref:"Ésaïe 40:31",      text:"Ceux qui se confient en l'Éternel renouvellent leurs forces." },
+  { ref:"Proverbes 3:5",    text:"Confie-toi en l'Éternel de tout ton cœur, et ne t'appuie pas sur ta sagesse." },
+  { ref:"2 Timothée 3:16",  text:"Toute l'Écriture est inspirée de Dieu, utile pour enseigner, pour convaincre." },
+  { ref:"Matthieu 6:33",    text:"Cherchez premièrement le royaume et la justice de Dieu, et toutes ces choses vous seront données." },
+  { ref:"Galates 5:22",     text:"Le fruit de l'Esprit, c'est l'amour, la joie, la paix, la patience, la bonté." },
+  { ref:"Hébreux 11:1",     text:"La foi, c'est la certitude des choses qu'on espère, la démonstration de celles qu'on ne voit pas." },
+  { ref:"1 Corinthiens 13:13", text:"Maintenant ces trois choses demeurent : la foi, l'espérance, l'amour ; mais la plus grande, c'est l'amour." },
+  { ref:"Apocalypse 21:4",  text:"Il essuiera toute larme de leurs yeux, et la mort ne sera plus." },
+];
+
+function getVerset() {
+  const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(),0,0)) / 86400000);
+  return VERSETS[dayOfYear % VERSETS.length];
+}
+
+function computeBadges(stats) {
+  return BADGES.filter(b => b.condition(stats));
+}
+
+
+
+// ─────────────────────────────────────────────────────────────
 // SUPABASE CLIENT (léger, sans SDK)
 // ─────────────────────────────────────────────────────────────
 const SUPA_URL = "https://gyqasmnbnfmkgoneoqzq.supabase.co";
@@ -86,16 +134,31 @@ async function dbSaveScore(playerId, pseudo, dailyPts, totalPts, currentLevel) {
       total_points: totalPts,
       current_level: currentLevel,
       last_played: todayStr,
+      streak: 1,
+      games_played: 1,
+      badges: JSON.stringify([]),
     });
   }
 
-  // If last_played is not today, reset daily points
   const isNewDay = existing.last_played !== todayStr;
+  const yesterday = new Date(); yesterday.setDate(yesterday.getDate()-1);
+  const yesterdayStr = yesterday.toISOString().split("T")[0];
+  const isConsecutive = existing.last_played === yesterdayStr;
+  const newStreak = isNewDay ? (isConsecutive ? (existing.streak||0)+1 : 1) : (existing.streak||1);
+  const newGamesPlayed = isNewDay ? (existing.games_played||0)+1 : (existing.games_played||1);
+  
+  // Compute badges
+  const stats = { streak: newStreak, totalPoints: totalPts, highestLevel: currentLevel, gamesPlayed: newGamesPlayed };
+  const earnedBadges = computeBadges(stats).map(b => b.id);
+
   return supaFetch(`scores?player_id=eq.${playerId}`, "PATCH", {
-    daily_points: isNewDay ? dailyPts : dailyPts,
+    daily_points: dailyPts,
     total_points: totalPts,
     current_level: currentLevel,
     last_played: todayStr,
+    streak: newStreak,
+    games_played: newGamesPlayed,
+    badges: JSON.stringify(earnedBadges),
     updated_at: new Date().toISOString(),
   });
 }
@@ -103,12 +166,15 @@ async function dbSaveScore(playerId, pseudo, dailyPts, totalPts, currentLevel) {
 // Load leaderboard
 async function dbGetLeaderboard() {
   const todayStr = today();
-  const all = await supaFetch("scores?select=pseudo,daily_points,total_points,current_level,last_played&order=total_points.desc&limit=20");
+  const all = await supaFetch("scores?select=pseudo,daily_points,total_points,current_level,last_played,streak,games_played,badges&order=total_points.desc&limit=20");
   return (all || []).map(r => ({
     pseudo: r.pseudo,
     todayPts: r.last_played === todayStr ? r.daily_points : 0,
     totalPts: r.total_points,
     highestLevel: r.current_level,
+    streak: r.streak || 0,
+    gamesPlayed: r.games_played || 0,
+    badges: r.badges ? JSON.parse(r.badges) : [],
   }));
 }
 
@@ -122,6 +188,9 @@ async function dbGetPlayerProgress(playerId) {
     currentLevel: score.current_level || 1,
     todayTotalScore: isNewDay ? 0 : score.daily_points,
     totalPoints: score.total_points || 0,
+    streak: score.streak || 0,
+    gamesPlayed: score.games_played || 0,
+    badges: score.badges ? JSON.parse(score.badges) : [],
   };
 }
 
@@ -172,6 +241,11 @@ function LogosChallenge() {
   const [countdown, setCountdown] = useState(timeUntilMidnight());
   const [lbLoading, setLbLoading] = useState(true);
   const [saving, setSaving]       = useState(false);
+  const [playerStreak, setPlayerStreak]   = useState(0);
+  const [playerBadges, setPlayerBadges]   = useState([]);
+  const [newBadge, setNewBadge]           = useState(null);
+  const [showBadges, setShowBadges]       = useState(false);
+  const [showVerset, setShowVerset]       = useState(false);
 
   // Quiz
   const [activeLevel, setActiveLevel] = useState(1);
@@ -325,7 +399,19 @@ function LogosChallenge() {
       setSaving(true);
       try {
         await dbSaveScore(player.id, player.pseudo, newTodayScore, newTotalPoints, newCurrentLevel);
-        // Refresh leaderboard after saving
+        // Check for new badges
+        const updatedScore = await dbGetPlayerProgress(player.id);
+        if (updatedScore) {
+          const oldBadgeIds = playerBadges;
+          const newBadgeIds = updatedScore.badges || [];
+          const justEarned = newBadgeIds.filter(id => !oldBadgeIds.includes(id));
+          if (justEarned.length > 0) {
+            const badge = BADGES.find(b => b.id === justEarned[0]);
+            if (badge) setNewBadge(badge);
+          }
+          setPlayerBadges(newBadgeIds);
+          setPlayerStreak(updatedScore.streak || 0);
+        }
         const lb = await dbGetLeaderboard();
         setLeaderboard(lb);
       } catch(e) {}
@@ -370,6 +456,10 @@ function LogosChallenge() {
       }
 
       setPlayer(p);
+      if (progress) {
+        setPlayerStreak(progress.streak || 0);
+        setPlayerBadges(progress.badges || []);
+      }
       setScreen("home");
     } catch(e) {
       alert("Erreur : " + e.message);
@@ -452,6 +542,35 @@ function LogosChallenge() {
   };
 
   // ─────────────────────────────────────────────────────────
+  // BADGE EARNED POPUP
+  // ─────────────────────────────────────────────────────────
+  if (newBadge) return (
+    <div style={{...S.app, display:"flex", alignItems:"center", justifyContent:"center", minHeight:"100vh"}}>
+      <div style={{maxWidth:360, margin:"0 auto", background:"rgba(255,255,255,0.05)", border:`2px solid ${gold}`, borderRadius:24, padding:"40px 28px", textAlign:"center", zIndex:10}}>
+        <div style={{fontSize:70, marginBottom:16}}>{newBadge.emoji}</div>
+        <div style={{fontSize:13, color:gold, letterSpacing:3, textTransform:"uppercase", marginBottom:8}}>🎉 Badge débloqué !</div>
+        <div style={{fontSize:22, fontWeight:700, color:"#FFF", marginBottom:8}}>{newBadge.name}</div>
+        <div style={{fontSize:14, color:"#888", marginBottom:28}}>{newBadge.desc}</div>
+        <button style={{...S.primB, marginBottom:0}} onClick={()=>setNewBadge(null)}>Continuer →</button>
+      </div>
+    </div>
+  );
+
+  // ─────────────────────────────────────────────────────────
+  // BADGE EARNED POPUP
+  // ─────────────────────────────────────────────────────────
+  if (newBadge) return (
+    <div style={{...S.app, display:"flex", alignItems:"center", justifyContent:"center", minHeight:"100vh"}}>
+      <div style={{maxWidth:360, margin:"0 auto", background:"rgba(255,255,255,0.05)", border:`2px solid ${gold}`, borderRadius:24, padding:"40px 28px", textAlign:"center", zIndex:10}}>
+        <div style={{fontSize:70, marginBottom:16}}>{newBadge.emoji}</div>
+        <div style={{fontSize:13, color:gold, letterSpacing:3, textTransform:"uppercase", marginBottom:8}}>🎉 Badge débloqué !</div>
+        <div style={{fontSize:22, fontWeight:700, color:"#FFF", marginBottom:8}}>{newBadge.name}</div>
+        <div style={{fontSize:14, color:"#888", marginBottom:28}}>{newBadge.desc}</div>
+        <button style={{...S.primB, marginBottom:0}} onClick={()=>setNewBadge(null)}>Continuer →</button>
+      </div>
+    </div>
+  );
+
   // REGISTER
   // ─────────────────────────────────────────────────────────
   if (screen === "register") return (
@@ -596,7 +715,7 @@ function LogosChallenge() {
           <div style={S.lcStat}>
             <div><span style={S.lcN}>{lp.score}</span><span style={S.lcL}>Points niveau</span></div>
             <div><span style={S.lcN}>{dailyProgress.todayTotalScore}</span><span style={S.lcL}>Total jour</span></div>
-            <div><span style={S.lcN}>{dailyProgress.totalPoints}</span><span style={S.lcL}>Total mondial</span></div>
+            <div><span style={S.lcN}>{playerStreak > 0 ? "🔥"+playerStreak+"j" : dailyProgress.totalPoints}</span><span style={S.lcL}>{playerStreak > 0 ? "Série" : "Total mondial"}</span></div>
           </div>
           <div style={S.svNot}>✅ Score sauvegardé sur le classement mondial !</div>
           {nextLvl ? (
@@ -616,6 +735,85 @@ function LogosChallenge() {
   }
 
   // ─────────────────────────────────────────────────────────
+  // BADGES SCREEN
+  // ─────────────────────────────────────────────────────────
+  if (showBadges) {
+    const earnedIds = playerBadges;
+    return (
+      <div style={S.app}>
+        <style>{`*{box-sizing:border-box}`}</style>
+        <div style={S.glow}/>
+        <nav style={S.nav}>
+          <button style={{background:"none",border:"none",color:gold,fontSize:16,cursor:"pointer",fontFamily:"inherit"}} onClick={()=>setShowBadges(false)}>← Retour</button>
+          <span style={{...S.navT, fontSize:15}}>🏅 Mes Badges</span>
+          <div style={{width:60}}/>
+        </nav>
+        <div style={{padding:"20px 16px"}}>
+          {player && (
+            <div style={{textAlign:"center", marginBottom:24, background:"rgba(255,215,0,0.05)", border:"1px solid rgba(255,215,0,0.15)", borderRadius:16, padding:"16px"}}>
+              <div style={{fontSize:13, color:gold, marginBottom:4}}>🔥 Série actuelle</div>
+              <div style={{fontSize:48, fontWeight:700, color:gold}}>{playerStreak}</div>
+              <div style={{fontSize:12, color:"#666"}}>jours consécutifs</div>
+            </div>
+          )}
+          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:12}}>
+            {BADGES.map(b => {
+              const earned = earnedIds.includes(b.id);
+              return (
+                <div key={b.id} style={{background:earned?"rgba(255,215,0,0.08)":"rgba(255,255,255,0.02)", border:`1px solid ${earned?"rgba(255,215,0,0.3)":"rgba(255,255,255,0.06)"}`, borderRadius:14, padding:"16px 12px", textAlign:"center", opacity:earned?1:0.4}}>
+                  <div style={{fontSize:36, marginBottom:8}}>{b.emoji}</div>
+                  <div style={{fontSize:12, fontWeight:700, color:earned?gold:"#666", marginBottom:4}}>{b.name}</div>
+                  <div style={{fontSize:10, color:"#555"}}>{b.desc}</div>
+                  {earned && <div style={{fontSize:9, color:"#7EC8A4", marginTop:6}}>✅ Débloqué</div>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // BADGES SCREEN
+  // ─────────────────────────────────────────────────────────
+  if (showBadges) {
+    const earnedIds = playerBadges;
+    return (
+      <div style={S.app}>
+        <style>{`*{box-sizing:border-box}`}</style>
+        <div style={S.glow}/>
+        <nav style={S.nav}>
+          <button style={{background:"none",border:"none",color:gold,fontSize:16,cursor:"pointer",fontFamily:"inherit",padding:"8px 0"}} onClick={()=>setShowBadges(false)}>← Retour</button>
+          <span style={{...S.navT, fontSize:15}}>🏅 Mes Badges</span>
+          <div style={{width:60}}/>
+        </nav>
+        <div style={{padding:"20px 16px"}}>
+          {player && (
+            <div style={{textAlign:"center", marginBottom:24, background:"rgba(255,215,0,0.05)", border:"1px solid rgba(255,215,0,0.15)", borderRadius:16, padding:"16px"}}>
+              <div style={{fontSize:13, color:gold, marginBottom:4}}>🔥 Série actuelle</div>
+              <div style={{fontSize:48, fontWeight:700, color:gold}}>{playerStreak}</div>
+              <div style={{fontSize:12, color:"#666"}}>jours consécutifs</div>
+            </div>
+          )}
+          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:12}}>
+            {BADGES.map(b => {
+              const earned = earnedIds.includes(b.id);
+              return (
+                <div key={b.id} style={{background:earned?"rgba(255,215,0,0.08)":"rgba(255,255,255,0.02)", border:`1px solid ${earned?"rgba(255,215,0,0.3)":"rgba(255,255,255,0.06)"}`, borderRadius:14, padding:"16px 12px", textAlign:"center", opacity:earned?1:0.4}}>
+                  <div style={{fontSize:36, marginBottom:8}}>{b.emoji}</div>
+                  <div style={{fontSize:12, fontWeight:700, color:earned?gold:"#666", marginBottom:4}}>{b.name}</div>
+                  <div style={{fontSize:10, color:"#555"}}>{b.desc}</div>
+                  {earned && <div style={{fontSize:9, color:"#7EC8A4", marginTop:6}}>✅ Débloqué</div>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // HOME
   // ─────────────────────────────────────────────────────────
   const dp = dailyProgress;
@@ -633,9 +831,16 @@ function LogosChallenge() {
           <span style={S.navS}>Au commencement était le Verbe</span>
         </div>
         {player ? (
-          <div style={S.chip}>
-            <div style={S.chipN}>{player.pseudo}</div>
-            <div style={S.chipS}>⭐ {dp.todayTotalScore} pts aujourd'hui</div>
+          <div style={{display:"flex", gap:8, alignItems:"center"}}>
+            {playerStreak > 0 && (
+              <div style={{background:"rgba(255,107,53,0.15)", border:"1px solid rgba(255,107,53,0.4)", borderRadius:12, padding:"5px 10px", fontSize:12, color:"#FF6B35", fontWeight:700}}>
+                🔥 {playerStreak}j
+              </div>
+            )}
+            <div style={S.chip} onClick={()=>setShowBadges(true)}>
+              <div style={S.chipN}>{player.pseudo} {playerBadges.length > 0 && <span style={{fontSize:10}}>🏅{playerBadges.length}</span>}</div>
+              <div style={S.chipS}>⭐ {dp.todayTotalScore} pts aujourd'hui</div>
+            </div>
           </div>
         ) : (
           <button style={S.joinB} onClick={()=>setScreen("register")}>+ Rejoindre</button>
@@ -738,6 +943,35 @@ function LogosChallenge() {
           🔄 Classement mis à jour en temps réel · {lbTab==="today" ? "Réinitialisé à minuit" : "Points cumulés à vie"}
         </p>
       </div>
+
+      {/* VERSET DU JOUR */}
+      {(() => {
+        const v = getVerset();
+        return (
+          <div style={{margin:"20px 16px 0", background:"rgba(255,215,0,0.04)", border:"1px solid rgba(255,215,0,0.12)", borderRadius:16, padding:"18px 16px", textAlign:"center"}}>
+            <div style={{fontSize:11, color:gold, letterSpacing:3, textTransform:"uppercase", marginBottom:10, fontWeight:700}}>📖 Verset du Jour</div>
+            <p style={{fontSize:14, color:"#CCC", lineHeight:1.7, fontStyle:"italic", marginBottom:8}}>"{v.text}"</p>
+            <span style={{fontSize:12, color:gold, fontWeight:700}}>— {v.ref}</span>
+          </div>
+        );
+      })()}
+
+      {/* VERSET DU JOUR */}
+      {(()=>{const v=getVerset();return(
+        <div style={{margin:"20px 16px 0",background:"rgba(255,215,0,0.04)",border:"1px solid rgba(255,215,0,0.12)",borderRadius:16,padding:"18px 16px",textAlign:"center"}}>
+          <div style={{fontSize:11,color:gold,letterSpacing:3,textTransform:"uppercase",marginBottom:10,fontWeight:700}}>📖 Verset du Jour</div>
+          <p style={{fontSize:14,color:"#CCC",lineHeight:1.7,fontStyle:"italic",marginBottom:8}}>"{v.text}"</p>
+          <span style={{fontSize:12,color:gold,fontWeight:700}}>— {v.ref}</span>
+        </div>
+      );})()}
+
+      {(()=>{const v=getVerset();return(
+        <div style={{margin:"20px 16px 0",background:"rgba(255,215,0,0.04)",border:"1px solid rgba(255,215,0,0.12)",borderRadius:16,padding:"18px 16px",textAlign:"center"}}>
+          <div style={{fontSize:11,color:gold,letterSpacing:3,textTransform:"uppercase",marginBottom:10,fontWeight:700}}>📖 Verset du Jour</div>
+          <p style={{fontSize:14,color:"#CCC",lineHeight:1.7,fontStyle:"italic",marginBottom:8}}>"{v.text}"</p>
+          <span style={{fontSize:12,color:gold,fontWeight:700}}>— {v.ref}</span>
+        </div>
+      );})()}
 
       <div style={S.footer}>"Ta parole est une lampe à mes pieds." — Psaume 119:105</div>
     </div>
