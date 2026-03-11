@@ -69,12 +69,9 @@ const VERSETS = [
   { ref:"Apocalypse 21:4",  text:"Il essuiera toute larme de leurs yeux, et la mort ne sera plus." },
 ];
 
-function getVerset(pseudo) {
+function getVerset() {
   const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(),0,0)) / 86400000);
-  const v = VERSETS[dayOfYear % VERSETS.length];
-  // Personalize with player name if available
-  const greeting = pseudo ? `${pseudo}, ` : "";
-  return { ...v, greeting };
+  return VERSETS[dayOfYear % VERSETS.length];
 }
 
 function computeBadges(stats) {
@@ -960,24 +957,14 @@ function LogosChallenge() {
 
       
 
-      {/* VERSET DU JOUR — un seul, personnalisé */}
-      {(()=>{
-        const v = getVerset(player ? player.pseudo : null);
-        return (
-          <div style={{margin:"20px 16px 0", background:"rgba(255,215,0,0.04)", border:"1px solid rgba(255,215,0,0.15)", borderRadius:16, padding:"20px 18px", textAlign:"center"}}>
-            <div style={{fontSize:11, color:gold, letterSpacing:3, textTransform:"uppercase", marginBottom:12, fontWeight:700}}>📖 Verset du Jour</div>
-            {player && (
-              <div style={{fontSize:12, color:"#9B7FD4", marginBottom:10, fontStyle:"normal"}}>
-                Pour toi, <strong style={{color:gold}}>{player.pseudo}</strong> 🙏
-              </div>
-            )}
-            <p style={{fontSize:15, color:"#CCC", lineHeight:1.8, fontStyle:"italic", marginBottom:10}}>"{v.text}"</p>
-            <span style={{fontSize:13, color:gold, fontWeight:700}}>— {v.ref}</span>
-          </div>
-        );
-      })()}
+      <div style={{margin:"20px 16px 0", background:"rgba(255,215,0,0.04)", border:"1px solid rgba(255,215,0,0.15)", borderRadius:16, padding:"20px 18px", textAlign:"center"}}>
+        <div style={{fontSize:11, color:gold, letterSpacing:3, textTransform:"uppercase", marginBottom:12, fontWeight:700}}>📖 Verset du Jour</div>
+        {player && <div style={{fontSize:12, color:"#9B7FD4", marginBottom:10}}>Pour toi, <strong style={{color:gold}}>{player.pseudo}</strong> 🙏</div>}
+        <p style={{fontSize:15, color:"#CCC", lineHeight:1.8, fontStyle:"italic", marginBottom:10}}>"{getVerset().text}"</p>
+        <span style={{fontSize:13, color:gold, fontWeight:700}}>— {getVerset().ref}</span>
+      </div>
 
-      <div style={S.footer}>"Ta parole est une lampe à mes pieds." — Psaume 119:105</div>
+            <div style={S.footer}>"Ta parole est une lampe à mes pieds." — Psaume 119:105</div>
     </div>
   );
 }
