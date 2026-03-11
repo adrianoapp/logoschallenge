@@ -1391,8 +1391,6 @@ function LogosChallenge() {
   // HOME
   // ─────────────────────────────────────────────────────────
   const dp = dailyProgress;
-  const todayLb   = [...leaderboard].sort((a,b) => b.todayPts  - a.todayPts);
-  const totalLb   = [...leaderboard].sort((a,b) => b.totalPts  - a.totalPts);
   const displayLb = lbTab === "today" ? lbToday : lbTotal;
 
   return (
