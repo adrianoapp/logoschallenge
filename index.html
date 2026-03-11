@@ -24,12 +24,12 @@
 // CONFIG
 // ─────────────────────────────────────────────────────────────
 const LEVELS = [
-  { id:1, name:"Novice",   emoji:"🌱", color:"#7EC8A4", desc:"Bases de la Bible",          questionsPerDay:10, timeLimit:20 },
-  { id:2, name:"Disciple", emoji:"📖", color:"#5BA8D4", desc:"Personnages & récits",       questionsPerDay:10, timeLimit:20 },
-  { id:3, name:"Apôtre",   emoji:"✝️", color:"#9B7FD4", desc:"Nouveau Testament",          questionsPerDay:10, timeLimit:20 },
-  { id:4, name:"Prophète", emoji:"🔥", color:"#D4A017", desc:"Prophètes & révélations",    questionsPerDay:10, timeLimit:30 },
-  { id:5, name:"Sage",     emoji:"⭐", color:"#E8C86B", desc:"Théologie & langues",        questionsPerDay:10, timeLimit:40 },
-  { id:6, name:"Saint",    emoji:"👑", color:"#FFD700", desc:"Expert des Écritures",       questionsPerDay:10, timeLimit:50 },
+  { id:1, name:"Novice",   emoji:"🌱", color:"#7EC8A4", desc:"Bases de la Bible",          questionsPerDay:10, timeLimit:20, minToPass:5, basePoints:10, timeBonus:1, streakBonus:5  },
+  { id:2, name:"Disciple", emoji:"📖", color:"#5BA8D4", desc:"Personnages & récits",       questionsPerDay:10, timeLimit:20, minToPass:6, basePoints:15, timeBonus:2, streakBonus:8  },
+  { id:3, name:"Apôtre",   emoji:"✝️", color:"#9B7FD4", desc:"Nouveau Testament",          questionsPerDay:10, timeLimit:20, minToPass:7, basePoints:20, timeBonus:2, streakBonus:10 },
+  { id:4, name:"Prophète", emoji:"🔥", color:"#D4A017", desc:"Prophètes & révélations",    questionsPerDay:10, timeLimit:30, minToPass:7, basePoints:30, timeBonus:3, streakBonus:15 },
+  { id:5, name:"Sage",     emoji:"⭐", color:"#E8C86B", desc:"Théologie & langues",        questionsPerDay:10, timeLimit:40, minToPass:8, basePoints:50, timeBonus:4, streakBonus:20 },
+  { id:6, name:"Saint",    emoji:"👑", color:"#FFD700", desc:"Expert des Écritures",       questionsPerDay:10, timeLimit:50, minToPass:9, basePoints:100,timeBonus:5, streakBonus:30 },
 ];
 
 // ─────────────────────────────────────────────────────────────
@@ -246,6 +246,8 @@ function LogosChallenge() {
   const [newBadge, setNewBadge]           = useState(null);
   const [showBadges, setShowBadges]       = useState(false);
   const [showVerset, setShowVerset]       = useState(false);
+  // attempts: { [levelId]: number } — resets each day
+  const [levelAttempts, setLevelAttempts] = useState({});
 
   // Quiz
   const [activeLevel, setActiveLevel] = useState(1);
@@ -280,7 +282,17 @@ function LogosChallenge() {
   }, []);
 
   useEffect(() => {
-    const iv = setInterval(() => setCountdown(timeUntilMidnight()), 1000);
+    let lastDate = new Date().toDateString();
+    const iv = setInterval(() => {
+      setCountdown(timeUntilMidnight());
+      // Reset attempts and daily progress at midnight
+      const now = new Date().toDateString();
+      if (now !== lastDate) {
+        lastDate = now;
+        setLevelAttempts({});
+        setDailyProgress(freshDailyProgress());
+      }
+    }, 1000);
     return () => clearInterval(iv);
   }, []);
 
@@ -361,10 +373,11 @@ function LogosChallenge() {
     setSelected(idx);
     setAnswered(true);
     const q = questions[qIndex];
+    const lvlCfg = LEVELS[activeLevel - 1];
     const isCorrect = idx === q.a;
     let pts = 0;
     if (isCorrect) {
-      pts = 10 + timeLeft * 2 + (streak >= 2 ? 5 : 0);
+      pts = lvlCfg.basePoints + timeLeft * lvlCfg.timeBonus + (streak >= 2 ? lvlCfg.streakBonus : 0);
       setStreak(s => s + 1);
     } else {
       setStreak(0);
@@ -375,20 +388,28 @@ function LogosChallenge() {
   async function goNext() {
     const dp = dailyProgress;
     const lp = dp.levelProgress[activeLevel];
+    const lvlCfg = LEVELS[activeLevel - 1];
     const newAnsweredCount = lp.answeredCount + 1;
+    const newCorrectCount  = (lp.correctCount || 0) + (selected === questions[qIndex]?.a ? 1 : 0);
     const newLevelScore    = lp.score + lastPts;
-    const totalForLevel    = LEVELS[activeLevel - 1].questionsPerDay;
+    const totalForLevel    = lvlCfg.questionsPerDay;
     const levelDone        = newAnsweredCount >= totalForLevel;
 
     const newLevelProgress = {
       ...dp.levelProgress,
-      [activeLevel]: { answeredCount: newAnsweredCount, score: newLevelScore, done: levelDone }
+      [activeLevel]: { answeredCount: newAnsweredCount, correctCount: newCorrectCount, score: newLevelScore, done: levelDone }
     };
     const newTodayScore  = dp.todayTotalScore + lastPts;
     const newTotalPoints = (dp.totalPoints || 0) + lastPts;
-    let newCurrentLevel  = dp.currentLevel;
-    if (levelDone && activeLevel === dp.currentLevel && activeLevel < 6) {
-      newCurrentLevel = activeLevel + 1;
+
+    // Check pass/fail when level is done
+    let passed = false;
+    let newCurrentLevel = dp.currentLevel;
+    if (levelDone) {
+      passed = newCorrectCount >= lvlCfg.minToPass;
+      if (passed && activeLevel === dp.currentLevel && activeLevel < 6) {
+        newCurrentLevel = activeLevel + 1;
+      }
     }
 
     const newDp = { ...dp, currentLevel: newCurrentLevel, levelProgress: newLevelProgress, todayTotalScore: newTodayScore, totalPoints: newTotalPoints };
@@ -399,7 +420,6 @@ function LogosChallenge() {
       setSaving(true);
       try {
         await dbSaveScore(player.id, player.pseudo, newTodayScore, newTotalPoints, newCurrentLevel);
-        // Check for new badges
         const updatedScore = await dbGetPlayerProgress(player.id);
         if (updatedScore) {
           const oldBadgeIds = playerBadges;
@@ -419,7 +439,10 @@ function LogosChallenge() {
     }
 
     if (levelDone) {
-      setScreen("levelComplete");
+      // Track attempt
+      const currentAttempts = (levelAttempts[activeLevel] || 0) + 1;
+      setLevelAttempts(prev => ({ ...prev, [activeLevel]: currentAttempts }));
+      setScreen(passed ? "levelComplete" : currentAttempts >= 2 ? "levelBlocked" : "levelFailed");
       return;
     }
 
@@ -427,7 +450,7 @@ function LogosChallenge() {
       setQIndex(i => i + 1);
       setSelected(null);
       setAnswered(false);
-      setTimeLeft(LEVELS[activeLevel-1].timeLimit);
+      setTimeLeft(lvlCfg.timeLimit);
       setLastPts(0);
     } else {
       loadNextBatch();
@@ -713,11 +736,11 @@ function LogosChallenge() {
           <span style={S.lcEmo}>{lvl.emoji}</span>
           <h2 style={S.lcTit}>Niveau {activeLevel} — {lvl.name}<br/>terminé ! 🎉</h2>
           <div style={S.lcStat}>
+            <div><span style={S.lcN}>{lp.correctCount||0}/{LEVELS[activeLevel-1].questionsPerDay}</span><span style={S.lcL}>Bonnes réponses</span></div>
             <div><span style={S.lcN}>{lp.score}</span><span style={S.lcL}>Points niveau</span></div>
             <div><span style={S.lcN}>{dailyProgress.todayTotalScore}</span><span style={S.lcL}>Total jour</span></div>
-            <div><span style={S.lcN}>{playerStreak > 0 ? "🔥"+playerStreak+"j" : dailyProgress.totalPoints}</span><span style={S.lcL}>{playerStreak > 0 ? "Série" : "Total mondial"}</span></div>
           </div>
-          <div style={S.svNot}>✅ Score sauvegardé sur le classement mondial !</div>
+          <div style={S.svNot}>🎉 {lp.correctCount||0}/{LEVELS[activeLevel-1].questionsPerDay} bonnes réponses — Niveau validé ! ✅ Score sauvegardé.</div>
           {nextLvl ? (
             <>
               <p style={{fontSize:13,color:"#888",marginBottom:14}}>🔓 <strong style={{color:nextLvl.color}}>{nextLvl.name}</strong> débloqué !</p>
@@ -735,6 +758,67 @@ function LogosChallenge() {
   }
 
   // ─────────────────────────────────────────────────────────
+  // LEVEL FAILED — 1st attempt, can retry
+  // ─────────────────────────────────────────────────────────
+  if (screen === "levelFailed") {
+    const lvl = LEVELS[activeLevel - 1];
+    const lp  = dailyProgress.levelProgress[activeLevel];
+    const correct = lp?.correctCount || 0;
+    return (
+      <div style={S.app}>
+        <style>{`*{box-sizing:border-box}`}</style>
+        <div style={S.glow}/>
+        <div style={S.lcCard}>
+          <span style={{fontSize:52, marginBottom:12, display:"block"}}>😔</span>
+          <h2 style={{...S.lcTit, color:"#FF6B6B"}}>Niveau {activeLevel} — {lvl.name}<br/>pas encore validé</h2>
+          <div style={S.lcStat}>
+            <div><span style={S.lcN}>{correct}</span><span style={S.lcL}>Bonnes réponses</span></div>
+            <div><span style={S.lcN}>{lvl.minToPass}</span><span style={S.lcL}>Minimum requis</span></div>
+            <div><span style={S.lcN}>{lp?.score || 0}</span><span style={S.lcL}>Points gagnés</span></div>
+          </div>
+          <div style={{...S.svNot, borderColor:"rgba(255,107,107,0.3)", background:"rgba(255,107,107,0.07)", color:"#FFB3B3", marginBottom:18}}>
+            💪 Courage ! Il te manquait {LEVELS[activeLevel-1].minToPass - correct} bonne{LEVELS[activeLevel-1].minToPass - correct > 1 ? "s réponses" : " réponse"}. Tu as encore <strong>1 essai</strong> aujourd'hui — les questions seront différentes !
+          </div>
+          <button style={S.primB} onClick={()=>{ 
+            setDailyProgress(prev => ({...prev, levelProgress: {...prev.levelProgress, [activeLevel]: {answeredCount:0, correctCount:0, score:0, done:false}}}));
+            setAskedTopics([]);
+            startLevel(activeLevel); 
+          }}>
+            🔄 Réessayer maintenant →
+          </button>
+          <button style={S.ghstB} onClick={()=>setScreen("home")}>⬅ Retour à l'accueil</button>
+        </div>
+      </div>
+    );
+  }
+
+  // LEVEL BLOCKED — 2nd attempt failed, come back tomorrow
+  // ─────────────────────────────────────────────────────────
+  if (screen === "levelBlocked") {
+    const lvl = LEVELS[activeLevel - 1];
+    const lp  = dailyProgress.levelProgress[activeLevel];
+    const correct = lp?.correctCount || 0;
+    return (
+      <div style={S.app}>
+        <style>{`*{box-sizing:border-box}`}</style>
+        <div style={S.glow}/>
+        <div style={S.lcCard}>
+          <span style={{fontSize:52, marginBottom:12, display:"block"}}>🔒</span>
+          <h2 style={{...S.lcTit, color:"#888"}}>Niveau {activeLevel} bloqué<br/>pour aujourd'hui</h2>
+          <div style={S.lcStat}>
+            <div><span style={S.lcN}>{correct}</span><span style={S.lcL}>Bonnes réponses</span></div>
+            <div><span style={S.lcN}>{lvl.minToPass}</span><span style={S.lcL}>Minimum requis</span></div>
+            <div><span style={S.lcN}>{lp?.score || 0}</span><span style={S.lcL}>Points gagnés</span></div>
+          </div>
+          <div style={{...S.svNot, borderColor:"rgba(255,215,0,0.2)", background:"rgba(255,215,0,0.04)", color:"#AAA", marginBottom:18}}>
+            🌙 Tu as utilisé tes 2 essais du jour. Reviens demain avec de nouvelles questions — tu y arriveras ! Tes points sont conservés. ✅
+          </div>
+          <button style={S.primB} onClick={()=>setScreen("home")}>⬅ Retour à l'accueil</button>
+        </div>
+      </div>
+    );
+  }
+
   // BADGES SCREEN
   // ─────────────────────────────────────────────────────────
   if (showBadges) {
@@ -775,6 +859,67 @@ function LogosChallenge() {
   }
 
   // ─────────────────────────────────────────────────────────
+  // LEVEL FAILED — 1st attempt, can retry
+  // ─────────────────────────────────────────────────────────
+  if (screen === "levelFailed") {
+    const lvl = LEVELS[activeLevel - 1];
+    const lp  = dailyProgress.levelProgress[activeLevel];
+    const correct = lp?.correctCount || 0;
+    return (
+      <div style={S.app}>
+        <style>{`*{box-sizing:border-box}`}</style>
+        <div style={S.glow}/>
+        <div style={S.lcCard}>
+          <span style={{fontSize:52, marginBottom:12, display:"block"}}>😔</span>
+          <h2 style={{...S.lcTit, color:"#FF6B6B"}}>Niveau {activeLevel} — {lvl.name}<br/>pas encore validé</h2>
+          <div style={S.lcStat}>
+            <div><span style={S.lcN}>{correct}</span><span style={S.lcL}>Bonnes réponses</span></div>
+            <div><span style={S.lcN}>{lvl.minToPass}</span><span style={S.lcL}>Minimum requis</span></div>
+            <div><span style={S.lcN}>{lp?.score || 0}</span><span style={S.lcL}>Points gagnés</span></div>
+          </div>
+          <div style={{...S.svNot, borderColor:"rgba(255,107,107,0.3)", background:"rgba(255,107,107,0.07)", color:"#FFB3B3", marginBottom:18}}>
+            💪 Courage ! Il te manquait {LEVELS[activeLevel-1].minToPass - correct} bonne{LEVELS[activeLevel-1].minToPass - correct > 1 ? "s réponses" : " réponse"}. Tu as encore <strong>1 essai</strong> aujourd'hui — les questions seront différentes !
+          </div>
+          <button style={S.primB} onClick={()=>{ 
+            setDailyProgress(prev => ({...prev, levelProgress: {...prev.levelProgress, [activeLevel]: {answeredCount:0, correctCount:0, score:0, done:false}}}));
+            setAskedTopics([]);
+            startLevel(activeLevel); 
+          }}>
+            🔄 Réessayer maintenant →
+          </button>
+          <button style={S.ghstB} onClick={()=>setScreen("home")}>⬅ Retour à l'accueil</button>
+        </div>
+      </div>
+    );
+  }
+
+  // LEVEL BLOCKED — 2nd attempt failed, come back tomorrow
+  // ─────────────────────────────────────────────────────────
+  if (screen === "levelBlocked") {
+    const lvl = LEVELS[activeLevel - 1];
+    const lp  = dailyProgress.levelProgress[activeLevel];
+    const correct = lp?.correctCount || 0;
+    return (
+      <div style={S.app}>
+        <style>{`*{box-sizing:border-box}`}</style>
+        <div style={S.glow}/>
+        <div style={S.lcCard}>
+          <span style={{fontSize:52, marginBottom:12, display:"block"}}>🔒</span>
+          <h2 style={{...S.lcTit, color:"#888"}}>Niveau {activeLevel} bloqué<br/>pour aujourd'hui</h2>
+          <div style={S.lcStat}>
+            <div><span style={S.lcN}>{correct}</span><span style={S.lcL}>Bonnes réponses</span></div>
+            <div><span style={S.lcN}>{lvl.minToPass}</span><span style={S.lcL}>Minimum requis</span></div>
+            <div><span style={S.lcN}>{lp?.score || 0}</span><span style={S.lcL}>Points gagnés</span></div>
+          </div>
+          <div style={{...S.svNot, borderColor:"rgba(255,215,0,0.2)", background:"rgba(255,215,0,0.04)", color:"#AAA", marginBottom:18}}>
+            🌙 Tu as utilisé tes 2 essais du jour. Reviens demain avec de nouvelles questions — tu y arriveras ! Tes points sont conservés. ✅
+          </div>
+          <button style={S.primB} onClick={()=>setScreen("home")}>⬅ Retour à l'accueil</button>
+        </div>
+      </div>
+    );
+  }
+
   // BADGES SCREEN
   // ─────────────────────────────────────────────────────────
   if (showBadges) {
@@ -877,17 +1022,20 @@ function LogosChallenge() {
           let statusText  = "🔒";
           let cursor      = "default";
 
-          if (isDone)        { borderColor=lvl.color+"44"; bgColor=lvl.color+"0d"; statusColor="#7EC8A4"; statusText="✅ Terminé"; }
-          else if (isActive) { borderColor=lvl.color+"88"; bgColor=lvl.color+"18"; statusColor=lvl.color; statusText=lp.answeredCount>0?"▶ Reprendre":"▶ Jouer ✨"; cursor="pointer"; }
+          const attempts = levelAttempts[lvl.id] || 0;
+          const isBlocked = !isDone && isUnlocked && attempts >= 2;
+          if (isDone)         { borderColor=lvl.color+"44"; bgColor=lvl.color+"0d"; statusColor="#7EC8A4"; statusText="✅ Terminé"; }
+          else if (isBlocked) { borderColor="rgba(255,100,100,0.3)"; bgColor="rgba(255,100,100,0.05)"; statusColor="#FF6B6B"; statusText="🔒 Demain"; }
+          else if (isActive)  { borderColor=lvl.color+"88"; bgColor=lvl.color+"18"; statusColor=lvl.color; statusText=lp.answeredCount>0?"▶ Reprendre":"▶ Jouer ✨"; cursor="pointer"; }
           else if (isUnlocked){ borderColor=lvl.color+"33"; statusColor=lvl.color; statusText="Disponible"; cursor="pointer"; }
 
           return (
             <div key={lvl.id} style={{...S.lvlSt, background:bgColor, borderColor, opacity:isUnlocked?1:0.3, cursor}}
-              onClick={()=>{ if(!isUnlocked||isDone) return; if(!player){setScreen("register");return;} startLevel(lvl.id); }}>
+              onClick={()=>{ if(!isUnlocked||isDone||isBlocked) return; if(!player){setScreen("register");return;} startLevel(lvl.id); }}>
               <span style={S.stIco}>{lvl.emoji}</span>
               <div style={S.stInf}>
                 <div style={S.stNm}>Niv.{lvl.id} — {lvl.name}</div>
-                <div style={S.stSb}>{lvl.desc} · {lvl.questionsPerDay} questions · ⏱ {lvl.timeLimit}s · {lp.score} pts</div>
+                <div style={S.stSb}>{lvl.desc} · ✅ {lvl.minToPass}/{lvl.questionsPerDay} pour passer · ⏱ {lvl.timeLimit}s</div>
                 {isUnlocked && (
                   <div style={S.pBar}>
                     <div style={{...S.pFill, width:`${pct}%`, background:isDone?"#7EC8A4":lvl.color}}/>
