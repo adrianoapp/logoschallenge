@@ -610,7 +610,7 @@ function LogosChallenge() {
       setLoadingQ(false);
       prefetchNext(levelId, newAsked);
     } catch (e) {
-      setLoadError({t.errorMsg});
+      setLoadError(t.errorMsg);
       setLoadingQ(false);
     }
   }
