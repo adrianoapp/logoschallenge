@@ -117,6 +117,14 @@ const T = {
     loadingLb: "Chargement du classement...",
     // Register
     registerTitle: "Rejoindre LogosChallenge",
+    signInGoogle: "Continuer avec Google",
+    orSeparator: "— ou entrez votre pseudo —",
+    linkAccount: "Lier à mon compte Google",
+    welcomeBack: "Bon retour",
+    newPlayer: "Nouveau joueur détecté !",
+    choosePseudo: "Choisissez votre pseudo",
+    linkExisting: "J'ai déjà un compte — lier mes points",
+    signingIn: "Connexion en cours...",
     registerDesc: "Créez votre profil pour sauvegarder votre progression et figurer dans le classement mondial",
     pseudoPlaceholder: "Votre pseudo...",
     startAdventure: "Commencer l'aventure →",
@@ -226,6 +234,14 @@ const T = {
     noPlayers: "Be the first to play! 🏆",
     loadingLb: "Loading leaderboard...",
     registerTitle: "Join LogosChallenge",
+    signInGoogle: "Continue with Google",
+    orSeparator: "— or enter your username —",
+    linkAccount: "Link to my Google account",
+    welcomeBack: "Welcome back",
+    newPlayer: "New player detected!",
+    choosePseudo: "Choose your username",
+    linkExisting: "I have an account — link my points",
+    signingIn: "Signing in...",
     registerDesc: "Create your profile to save your progress and appear on the global leaderboard",
     pseudoPlaceholder: "Your username...",
     startAdventure: "Start the adventure →",
@@ -354,6 +370,43 @@ async function supaFetch(path, method = "GET", body = null) {
 }
 
 // Get or create player by pseudo
+// ─────────────────────────────────────────────────────────────
+// GOOGLE AUTH
+// ─────────────────────────────────────────────────────────────
+async function signInWithGoogle() {
+  const { data, error } = await supabaseAuth("signInWithOAuth", {
+    provider: "google",
+    options: {
+      redirectTo: window.location.origin + "?auth=callback",
+      queryParams: { access_type: "offline", prompt: "consent" },
+    },
+  });
+  return { data, error };
+}
+
+async function supabaseAuth(action, params) {
+  if (action === "signInWithOAuth") {
+    const redirectTo = encodeURIComponent(params.options.redirectTo);
+    const url = `${SUPA_URL}/auth/v1/authorize?provider=${params.provider}&redirect_to=${redirectTo}`;
+    window.location.href = url;
+    return { data: null, error: null };
+  }
+  if (action === "getSession") {
+    const res = await fetch(`${SUPA_URL}/auth/v1/user`, {
+      headers: { "apikey": SUPA_KEY, "Authorization": `Bearer ${params.accessToken}` }
+    });
+    return res.ok ? { data: await res.json(), error: null } : { data: null, error: "No session" };
+  }
+}
+
+async function getGoogleUser(accessToken) {
+  const res = await fetch(`${SUPA_URL}/auth/v1/user`, {
+    headers: { "apikey": SUPA_KEY, "Authorization": `Bearer ${accessToken}` }
+  });
+  if (!res.ok) return null;
+  return await res.json();
+}
+
 async function dbGetOrCreatePlayer(pseudo, referredBy = null) {
   // Check if exists
   const existing = await supaFetch(`players?pseudo=eq.${encodeURIComponent(pseudo)}&select=*`);
@@ -528,8 +581,98 @@ function LogosChallenge() {
   const [referralCount, setReferralCount] = useState(0);
   const [showShare, setShowShare]   = useState(false);
   const [lang, setLang]             = useState(() => localStorage.getItem("lc_lang") || "fr");
+  const [googleUser, setGoogleUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [showLinkForm, setShowLinkForm] = useState(false);
   // Read referrer from URL
   const urlRef = new URLSearchParams(window.location.search).get("ref") || null;
+  
+  // Handle Google OAuth callback
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash && hash.includes("access_token")) {
+      const params = new URLSearchParams(hash.replace("#", "?"));
+      const accessToken = params.get("access_token");
+      if (accessToken) {
+        setAuthLoading(true);
+        // Clean URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+        handleGoogleCallback(accessToken);
+      }
+    }
+  }, []);
+
+  async function handleGoogleCallback(accessToken) {
+    try {
+      const res = await fetch(`${SUPA_URL}/auth/v1/user`, {
+        headers: { "apikey": SUPA_KEY, "Authorization": `Bearer ${accessToken}` }
+      });
+      if (!res.ok) throw new Error("Auth failed");
+      const gUser = await res.json();
+      const email = gUser.email;
+      const name = gUser.user_metadata?.full_name || gUser.user_metadata?.name || email.split("@")[0];
+      const googleId = gUser.id;
+      setGoogleUser({ email, name, googleId, accessToken });
+      
+      // Check if player already exists with this google_id
+      const existing = await supaFetch(`players?google_id=eq.${googleId}&select=*`);
+      if (existing && existing.length > 0) {
+        // Auto login
+        const p = existing[0];
+        await loadPlayerSession(p);
+      } else {
+        // Check by email
+        const byEmail = await supaFetch(`players?email=eq.${encodeURIComponent(email)}&select=*`);
+        if (byEmail && byEmail.length > 0) {
+          await loadPlayerSession(byEmail[0]);
+        } else {
+          // New player — show pseudo choice
+          setPseudo(name.split(" ")[0]);
+          setShowLinkForm(true);
+          setScreen("register");
+        }
+      }
+    } catch(e) {
+      console.error("Google auth error:", e);
+    }
+    setAuthLoading(false);
+  }
+
+  async function loadPlayerSession(p) {
+    setPlayer(p);
+    try { localStorage.setItem("lc_player_id", p.id); localStorage.setItem("lc_pseudo", p.pseudo); } catch(e) {}
+    const progress = await dbGetPlayerProgress(p.id);
+    if (progress) {
+      const lp = {};
+      LEVELS.forEach(l => { lp[l.id] = { answeredCount: 0, correctCount: 0, score: 0, done: false }; });
+      setDailyProgress({ levelProgress: {...lp, ...progress.levelProgress}, todayTotalScore: progress.todayTotalScore });
+      if (progress.currentLevel) setCurrentMaxLevel(progress.currentLevel);
+      if (progress.streak) setPlayerStreak(progress.streak);
+      if (progress.badges) setPlayerBadges(progress.badges);
+      const rc = await dbGetReferralCount(p.id);
+      setReferralCount(rc);
+    }
+    setScreen("home");
+  }
+
+  async function registerWithGoogle() {
+    if (!pseudo.trim() || !googleUser) return;
+    const pseudoTrimmed = pseudo.trim();
+    try {
+      // Update player with google_id and email
+      const p = await dbGetOrCreatePlayer(pseudoTrimmed, urlRef);
+      if (!p) throw new Error("Erreur création joueur");
+      // Link google_id to player
+      await supaFetch(`players?id=eq.${p.id}`, "PATCH", { 
+        google_id: googleUser.googleId,
+        email: googleUser.email 
+      });
+      setShowLinkForm(false);
+      await loadPlayerSession(p);
+    } catch(e) {
+      console.error("Register with Google error:", e);
+    }
+  }
   const t = T[lang]; // current translations
   const [playerStreak, setPlayerStreak]   = useState(0);
   const [playerBadges, setPlayerBadges]   = useState([]);
@@ -899,6 +1042,16 @@ function LogosChallenge() {
 
   // REGISTER
   // ─────────────────────────────────────────────────────────
+  if (authLoading) return (
+    <div style={{...S.app, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:20}}>
+      <div style={{fontSize:48}}>✝️</div>
+      <div style={{color:gold, fontSize:16, fontWeight:700}}>{t.signingIn}</div>
+      <div style={{display:"flex", gap:8}}>
+        {[0,1,2].map(i => <div key={i} style={{width:10,height:10,borderRadius:"50%",background:gold,animation:`pulse 1.2s ${i*0.4}s infinite`}}/>)}
+      </div>
+    </div>
+  );
+
   if (screen === "register") return (
     <div style={S.app}>
       <style>{`*{box-sizing:border-box}`}</style>
@@ -907,8 +1060,42 @@ function LogosChallenge() {
         <div style={{fontSize:44,marginBottom:10}}>✝️</div>
         <h2 style={{color:gold,marginBottom:6,fontSize:19}}>{t.registerTitle}</h2>
         <p style={{color:"#666",fontSize:13,marginBottom:20,lineHeight:1.6}}>{t.registerDesc}</p>
-        <input style={S.inp} placeholder={t.pseudoPlaceholder} value={pseudo} onChange={e=>setPseudo(e.target.value)} maxLength={20} onKeyDown={e=>e.key==="Enter"&&registerPlayer()}/>
-        <button style={S.primB} onClick={registerPlayer}>{t.startAdventure}</button>
+
+        {/* Google Sign-In Button */}
+        {!showLinkForm && (
+          <button onClick={()=>{ setAuthLoading(true); window.location.href=`${SUPA_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(window.location.origin + window.location.pathname)}`; }}
+            style={{width:"100%",background:"#fff",border:"none",borderRadius:12,padding:"14px 20px",color:"#333",cursor:"pointer",fontFamily:"inherit",fontSize:15,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:12,marginBottom:16,boxShadow:"0 2px 8px rgba(0,0,0,0.3)"}}>
+            <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+            {authLoading ? t.signingIn : t.signInGoogle}
+          </button>
+        )}
+
+        {/* Pseudo form - shown after Google auth for new players */}
+        {showLinkForm && googleUser && (
+          <div style={{width:"100%",marginBottom:16}}>
+            <p style={{color:"#AAA",fontSize:13,marginBottom:12,textAlign:"center"}}>
+              👋 {t.newPlayer}<br/>
+              <span style={{color:gold,fontWeight:700}}>{googleUser.email}</span>
+            </p>
+            <p style={{color:"#888",fontSize:12,marginBottom:8,textAlign:"center"}}>{t.choosePseudo}</p>
+            <input style={S.inp} placeholder={t.pseudoPlaceholder} value={pseudo} onChange={e=>setPseudo(e.target.value)} maxLength={20} onKeyDown={e=>e.key==="Enter"&&registerWithGoogle()}/>
+            <button style={S.primB} onClick={registerWithGoogle}>{t.startAdventure}</button>
+          </div>
+        )}
+
+        {/* Separator */}
+        {!showLinkForm && (
+          <>
+            <div style={{display:"flex",alignItems:"center",gap:8,width:"100%",marginBottom:16}}>
+              <div style={{flex:1,height:1,background:"rgba(255,255,255,0.1)"}}/>
+              <span style={{color:"#555",fontSize:11}}>{t.orSeparator}</span>
+              <div style={{flex:1,height:1,background:"rgba(255,255,255,0.1)"}}/>
+            </div>
+            <input style={S.inp} placeholder={t.pseudoPlaceholder} value={pseudo} onChange={e=>setPseudo(e.target.value)} maxLength={20} onKeyDown={e=>e.key==="Enter"&&registerPlayer()}/>
+            <button style={S.primB} onClick={registerPlayer}>{t.startAdventure}</button>
+          </>
+        )}
+
         <button style={S.ghstB} onClick={()=>setScreen("home")}>{t.back}</button>
       </div>
     </div>
