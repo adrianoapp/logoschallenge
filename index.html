@@ -181,6 +181,24 @@ const T = {
     unlocked2: "✅ Débloqué",
     // Share
     shareTitle: "📲 Inviter des amis",
+    profileTitle: "Mon Profil",
+    editPseudo: "Modifier le pseudo",
+    savePseudo: "Enregistrer",
+    pseudoUpdated: "Pseudo mis à jour ! ✅",
+    pseudoTaken: "Ce pseudo est déjà pris.",
+    myStats: "Mes Statistiques",
+    myRank: "Mon Classement",
+    worldRank: "Rang mondial",
+    dailyRank: "Rang du jour",
+    notRanked: "Non classé",
+    totalPoints: "Points totaux",
+    gamesPlayed2: "Parties jouées",
+    bestLevel: "Meilleur niveau",
+    dailyWinsLabel: "Victoires quotidiennes 🏆",
+    noDailyWins: "Pas encore de victoire 1ère place",
+    inviteFriends: "Inviter des amis",
+    downloadApp: "Télécharger l'app",
+    shareAppMsg: (link) => `🎮 Rejoins-moi sur *LogosChallenge* — le quiz biblique avec des questions IA infinies !\n\n📖 6 niveaux progressifs, classement mondial, verset du jour...\n\n👉 Joue ici : ${link}\n\n✝️ _"Ta parole est une lampe à mes pieds"_`,
     yourImpact: "Ton impact",
     noInvite: "personne invitée pour l'instant",
     oneInvite: "ami a rejoint grâce à toi 🎉",
@@ -299,6 +317,24 @@ const T = {
     days: "consecutive days",
     unlocked2: "✅ Unlocked",
     shareTitle: "📲 Invite friends",
+    profileTitle: "My Profile",
+    editPseudo: "Edit username",
+    savePseudo: "Save",
+    pseudoUpdated: "Username updated! ✅",
+    pseudoTaken: "This username is already taken.",
+    myStats: "My Statistics",
+    myRank: "My Ranking",
+    worldRank: "Global rank",
+    dailyRank: "Today's rank",
+    notRanked: "Not ranked",
+    totalPoints: "Total points",
+    gamesPlayed2: "Games played",
+    bestLevel: "Best level",
+    dailyWinsLabel: "Daily victories 🏆",
+    noDailyWins: "No 1st place victories yet",
+    inviteFriends: "Invite friends",
+    downloadApp: "Download the app",
+    shareAppMsg: (link) => `🎮 Join me on *LogosChallenge* — the Bible quiz with infinite AI questions!\n\n📖 6 progressive levels, global leaderboard, verse of the day...\n\n👉 Play here: ${link}\n\n✝️ _"Your word is a lamp to my feet"_`,
     yourImpact: "Your impact",
     noInvite: "no one invited yet",
     oneInvite: "friend joined thanks to you 🎉",
@@ -476,6 +512,7 @@ async function dbSaveScore(playerId, pseudo, dailyPts, totalPts, currentLevel) {
       streak: 1,
       games_played: 1,
       badges: JSON.stringify([]),
+      daily_wins: 0,
     });
   }
 
@@ -600,6 +637,11 @@ function LogosChallenge() {
   const [showLinkForm, setShowLinkForm] = useState(false);
   const [recoverMode, setRecoverMode]   = useState(false); // true = recovering old account
   const [recoverError, setRecoverError] = useState("");
+  const [showProfile, setShowProfile]   = useState(false);
+  const [editingPseudo, setEditingPseudo] = useState(false);
+  const [newPseudo, setNewPseudo]       = useState("");
+  const [pseudoMsg, setPseudoMsg]       = useState("");
+  const [playerRank, setPlayerRank]     = useState({world: null, today: null});
   // Read referrer from URL
   const urlRef = new URLSearchParams(window.location.search).get("ref") || null;
   
@@ -678,7 +720,11 @@ function LogosChallenge() {
     try {
       if (recoverMode) {
         // Try to find existing player by pseudo
-        const existing = await supaFetch(`players?pseudo=eq.${encodeURIComponent(pseudoTrimmed)}&select=*`);
+        // Try exact match first, then case-insensitive
+        let existing = await supaFetch(`players?pseudo=eq.${pseudoTrimmed}&select=*`);
+        if (!existing || existing.length === 0) {
+          existing = await supaFetch(`players?pseudo=ilike.${pseudoTrimmed}&select=*`);
+        }
         if (!existing || existing.length === 0) {
           setRecoverError(t.recoverNotFound);
           return;
@@ -731,6 +777,49 @@ function LogosChallenge() {
   const [prefetched, setPrefetched]   = useState(null);
 
   const timerRef = useRef(null);
+
+  // ── Profile functions ───────────────────────────────────────
+  async function updatePseudo() {
+    if (!newPseudo.trim() || !player) return;
+    const trimmed = newPseudo.trim();
+    setPseudoMsg("");
+    // Check not taken
+    const existing = await supaFetch(`players?pseudo=eq.${trimmed}&select=id`);
+    if (existing && existing.length > 0 && existing[0].id !== player.id) {
+      setPseudoMsg(t.pseudoTaken);
+      return;
+    }
+    await supaFetch(`players?id=eq.${player.id}`, "PATCH", { pseudo: trimmed });
+    await supaFetch(`scores?player_id=eq.${player.id}`, "PATCH", { pseudo: trimmed });
+    setPlayer({...player, pseudo: trimmed});
+    try { localStorage.setItem("lc_pseudo", trimmed); } catch(e) {}
+    setPseudoMsg(t.pseudoUpdated);
+    setEditingPseudo(false);
+    setTimeout(() => setPseudoMsg(""), 3000);
+  }
+
+  async function loadPlayerRank() {
+    if (!player) return;
+    const todayStr = today();
+    // World rank
+    const allTotal = await supaFetch("scores?select=player_id,total_points&order=total_points.desc");
+    const worldIdx = (allTotal || []).findIndex(r => r.player_id === player.id);
+    // Today rank
+    const allToday = await supaFetch(`scores?select=player_id,daily_points,last_played&last_played=eq.${todayStr}&order=daily_points.desc`);
+    const todayIdx = (allToday || []).findIndex(r => r.player_id === player.id);
+    setPlayerRank({
+      world: worldIdx >= 0 ? worldIdx + 1 : null,
+      today: todayIdx >= 0 ? todayIdx + 1 : null,
+    });
+  }
+
+  async function openProfile() {
+    setNewPseudo(player?.pseudo || "");
+    setPseudoMsg("");
+    setEditingPseudo(false);
+    setShowProfile(true);
+    await loadPlayerRank();
+  }
 
   // ── Language toggle ─────────────────────────────────────────
   function toggleLang() {
@@ -1648,7 +1737,7 @@ function LogosChallenge() {
                   🔥 {playerStreak}j
                 </div>
               )}
-              <div style={S.chip} onClick={()=>setShowBadges(true)}>
+              <div style={S.chip} onClick={openProfile}>
                 <div style={S.chipN}>{player.pseudo} {playerBadges.length > 0 && <span style={{fontSize:10}}>🏅{playerBadges.length}</span>}</div>
                 <div style={S.chipS}>⭐ {dp.todayTotalScore} {t.ptsToday}</div>
               </div>
@@ -1737,7 +1826,7 @@ function LogosChallenge() {
         )}
       </div>
 
-      <div style={S.secT}>{t.leaderboard} {saving && "💾"}</div>
+      <div id="lb-section" style={S.secT}>{t.leaderboard} {saving && "💾"}</div>
       <div style={S.lbW}>
         <div style={S.lbTbs}>
           <button onClick={()=>setLbTab("today")} style={{...S.lbTb, background:lbTab==="today"?"rgba(255,215,0,0.1)":"rgba(255,255,255,0.02)", borderColor:lbTab==="today"?gold:"rgba(255,255,255,0.07)", color:lbTab==="today"?gold:"#666"}}>
