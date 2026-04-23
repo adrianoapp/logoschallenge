@@ -23,35 +23,40 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #06060F; -webkit-font-smoothing: antialiased; }
+    body { background: #0D1B2A; -webkit-font-smoothing: antialiased; }
     
-    @keyframes spin { to { transform: rotate(360deg) } }
-    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.8)} }
-    @keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
-    @keyframes fadeIn { from{opacity:0} to{opacity:1} }
-    @keyframes floatY { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
-    @keyframes glowPulse { 0%,100%{opacity:0.15} 50%{opacity:0.4} }
+    @keyframes spin    { to { transform: rotate(360deg) } }
+    @keyframes pulse   { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.8)} }
+    @keyframes slideUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes fadeIn  { from{opacity:0} to{opacity:1} }
+    @keyframes floatY  { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+    @keyframes glowPulse { 0%,100%{opacity:0.3} 50%{opacity:0.8} }
+    @keyframes popIn   { 0%{opacity:0;transform:scale(0.8)} 100%{opacity:1;transform:scale(1)} }
     
     ::-webkit-scrollbar { width: 3px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: rgba(255,215,0,0.12); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb { background: rgba(99,202,183,0.2); border-radius: 4px; }
     
-    input:focus { border-color: rgba(255,215,0,0.35) !important; }
-    
-    .opt-btn { transition: all 0.18s ease !important; }
-    .opt-btn:hover:not(:disabled) { transform: translateY(-2px) !important; border-color: rgba(255,215,0,0.25) !important; background: rgba(255,215,0,0.05) !important; }
+    input:focus { border-color: rgba(99,202,183,0.4) !important; background: rgba(99,202,183,0.04) !important; }
+
+    .opt-btn { transition: all 0.18s cubic-bezier(0.34,1.56,0.64,1) !important; }
+    .opt-btn:hover:not(:disabled) { transform: translateY(-3px) scale(1.01) !important; border-color: rgba(99,202,183,0.3) !important; background: rgba(99,202,183,0.08) !important; box-shadow: 0 8px 24px rgba(0,0,0,0.2) !important; }
     .opt-btn:active:not(:disabled) { transform: scale(0.97) !important; }
-    
+    .opt-btn.correct { background: rgba(99,202,183,0.15) !important; border-color: #63CAB7 !important; }
+    .opt-btn.wrong   { background: rgba(255,80,80,0.1) !important; border-color: rgba(255,80,80,0.4) !important; }
+
     .level-card { transition: all 0.25s ease !important; }
-    .level-card:hover { transform: translateX(3px) !important; }
-    
-    .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 12px 40px rgba(255,215,0,0.25) !important; }
-    .btn-primary:active { transform: scale(0.98); }
-    
-    .nav-chip:hover { background: rgba(255,215,0,0.1) !important; }
-    
-    .fade-in { animation: fadeIn 0.4s ease; }
-    .slide-up { animation: slideUp 0.4s ease; }
+    .level-card:hover { transform: translateY(-2px) !important; box-shadow: 0 12px 40px rgba(0,0,0,0.3) !important; }
+    .level-card.active-level { box-shadow: 0 0 0 1px rgba(99,202,183,0.3), 0 12px 40px rgba(99,202,183,0.1) !important; }
+
+    .btn-primary { transition: all 0.2s ease !important; }
+    .btn-primary:hover { opacity:0.92; transform:translateY(-2px); box-shadow:0 16px 48px rgba(99,202,183,0.3) !important; }
+    .btn-primary:active { transform:scale(0.98); }
+
+    .nav-chip:hover { background: rgba(255,255,255,0.1) !important; }
+    .fade-in  { animation: fadeIn 0.35s ease; }
+    .slide-up { animation: slideUp 0.4s cubic-bezier(0.34,1.56,0.64,1); }
+    .pop-in   { animation: popIn 0.4s cubic-bezier(0.34,1.56,0.64,1); }
   </style>
 </head>
 <body>
@@ -1159,101 +1164,100 @@ const card    = "rgba(255,255,255,0.035)";
 const border  = "rgba(255,255,255,0.07)";
 const accent  = "#7C6FE0";  // soft indigo accent
   const S = {
-  app:   { minHeight:"100vh", background:"#06060F", color:"#E8E8F0", fontFamily:"'Outfit',sans-serif", overflowX:"hidden", paddingBottom:100 },
-  
-  // Nav
-  nav:   { display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 20px", background:"rgba(6,6,15,0.85)", backdropFilter:"blur(24px)", position:"sticky", top:0, zIndex:100, borderBottom:"1px solid rgba(255,255,255,0.04)" },
+  // ── Layout ──────────────────────────────────────────────────
+  app:   { minHeight:"100vh", background:"linear-gradient(160deg,#0D1B2A 0%,#0A1628 50%,#0D1B2A 100%)", color:"#E8EDF5", fontFamily:"'DM Sans',sans-serif", overflowX:"hidden", paddingBottom:100 },
+
+  // ── Nav ─────────────────────────────────────────────────────
+  nav:   { display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 20px", background:"rgba(13,27,42,0.9)", backdropFilter:"blur(20px)", position:"sticky", top:0, zIndex:100, borderBottom:"1px solid rgba(255,255,255,0.06)" },
   navL:  { display:"flex", flexDirection:"column" },
-  navT:  { color:gold, fontSize:17, fontWeight:700, letterSpacing:0.5, fontFamily:"'Playfair Display',serif" },
-  navS:  { fontSize:9, color:"rgba(255,215,0,0.25)", letterSpacing:5, textTransform:"uppercase", marginTop:2 },
-  chip:  { background:"rgba(255,215,0,0.06)", border:"1px solid rgba(255,215,0,0.15)", borderRadius:24, padding:"8px 16px", textAlign:"right", cursor:"pointer", transition:"all 0.2s" },
+  navT:  { color:"#fff", fontSize:18, fontWeight:700, letterSpacing:-0.3, fontFamily:"'Sora',sans-serif" },
+  navS:  { fontSize:9, color:"rgba(255,255,255,0.3)", letterSpacing:4, textTransform:"uppercase", marginTop:2 },
+  chip:  { background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:28, padding:"8px 16px", textAlign:"right", cursor:"pointer", transition:"all 0.2s", backdropFilter:"blur(10px)" },
   chipN: { fontSize:13, fontWeight:700, color:"#fff" },
-  chipS: { fontSize:10, color:"rgba(255,215,0,0.5)", marginTop:1 },
-  joinB: { background:"linear-gradient(135deg,#FFD700,#F5A623)", color:"#06060F", border:"none", padding:"10px 20px", borderRadius:24, fontWeight:700, cursor:"pointer", fontSize:13, letterSpacing:0.3, fontFamily:"'Outfit',sans-serif" },
+  chipS: { fontSize:10, color:"rgba(99,202,183,0.8)", marginTop:1 },
+  joinB: { background:"linear-gradient(135deg,#63CAB7,#4FACFE)", color:"#fff", border:"none", padding:"11px 20px", borderRadius:24, fontWeight:700, cursor:"pointer", fontSize:13, letterSpacing:0.3, fontFamily:"'DM Sans',sans-serif", boxShadow:"0 4px 16px rgba(99,202,183,0.3)" },
 
-  // Section title
-  secT:  { textAlign:"center", fontSize:9, color:"rgba(255,215,0,0.35)", letterSpacing:5, textTransform:"uppercase", margin:"32px 0 16px", fontWeight:600 },
+  // ── Section title ────────────────────────────────────────────
+  secT:  { textAlign:"center", fontSize:9, color:"rgba(255,255,255,0.25)", letterSpacing:5, textTransform:"uppercase", margin:"28px 0 14px", fontWeight:600 },
 
-  // Level cards
-  pathW: { margin:"0 14px 8px", background:"rgba(255,255,255,0.025)", border:"1px solid rgba(255,255,255,0.06)", borderRadius:20, padding:"16px", transition:"all 0.3s", cursor:"default" },
+  // ── Score hero ───────────────────────────────────────────────
+  todS:  { textAlign:"center", marginBottom:20, padding:"28px 20px", background:"linear-gradient(135deg,rgba(99,202,183,0.08),rgba(79,172,254,0.08))", margin:"14px", borderRadius:28, border:"1px solid rgba(255,255,255,0.06)", position:"relative", overflow:"hidden" },
+  todN:  { fontSize:72, fontWeight:800, color:"#fff", display:"block", lineHeight:1, letterSpacing:-3, fontFamily:"'Sora',sans-serif" },
+  todL:  { fontSize:11, color:"rgba(255,255,255,0.35)", marginTop:8, letterSpacing:3, textTransform:"uppercase" },
+
+  // ── Level cards ──────────────────────────────────────────────
+  pathW: { margin:"0 14px 10px", borderRadius:22, padding:"18px 16px", transition:"all 0.25s", cursor:"default", position:"relative", overflow:"hidden" },
   pathH: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 },
-  pathT: { fontSize:15, fontWeight:700, color:"#fff" },
-  cdBdg: { fontFamily:"inherit", fontSize:11, color:gold, background:"rgba(255,215,0,0.08)", border:"1px solid rgba(255,215,0,0.15)", borderRadius:20, padding:"3px 10px", fontWeight:600 },
-  
-  // Score display
-  todS:  { textAlign:"center", marginBottom:24, padding:"0 14px" },
-  todN:  { fontSize:64, fontWeight:800, color:gold, display:"block", lineHeight:1, letterSpacing:-2, fontFamily:"'Playfair Display',serif" },
-  todL:  { fontSize:11, color:"rgba(255,255,255,0.25)", marginTop:6, letterSpacing:3, textTransform:"uppercase" },
-  
-  // Level row
-  lvlSt: { display:"flex", alignItems:"center", gap:14, padding:"16px", borderRadius:18, border:"1px solid", marginBottom:8, transition:"all 0.3s", cursor:"default" },
-  stIco: { fontSize:26, width:44, height:44, background:"rgba(255,255,255,0.04)", borderRadius:14, display:"flex", alignItems:"center", justifyContent:"center" },
+  pathT: { fontSize:15, fontWeight:700, color:"#fff", fontFamily:"'Sora',sans-serif" },
+  cdBdg: { fontFamily:"'DM Sans',sans-serif", fontSize:11, borderRadius:20, padding:"4px 12px", fontWeight:700 },
+  stIco: { fontSize:28, width:48, height:48, borderRadius:16, display:"flex", alignItems:"center", justifyContent:"center", marginRight:4 },
   stInf: { flex:1 },
-  stNm:  { fontWeight:700, fontSize:14, color:"#fff" },
-  stSb:  { fontSize:11, color:"rgba(255,255,255,0.3)", marginTop:3 },
-  stSt:  { fontSize:12, fontWeight:700, textAlign:"right", minWidth:72 },
-  pBar:  { height:2, borderRadius:2, background:"rgba(255,255,255,0.05)", marginTop:10, overflow:"hidden" },
-  pFill: { height:"100%", borderRadius:2, transition:"width 0.8s cubic-bezier(0.4,0,0.2,1)" },
-  
-  // AI badge
-  aiBdg: { display:"inline-flex", alignItems:"center", gap:6, background:"rgba(255,215,0,0.05)", border:"1px solid rgba(255,215,0,0.12)", borderRadius:20, padding:"7px 16px", fontSize:11, color:"rgba(255,215,0,0.6)", margin:"0 14px 12px", letterSpacing:0.5 },
-  
-  // Quiz
+  stNm:  { fontWeight:700, fontSize:15, color:"#fff", fontFamily:"'Sora',sans-serif" },
+  stSb:  { fontSize:11, color:"rgba(255,255,255,0.35)", marginTop:3 },
+  stSt:  { fontSize:13, fontWeight:700, textAlign:"right", minWidth:80 },
+  lvlSt: { display:"flex", alignItems:"center", gap:14, padding:"18px 16px", borderRadius:22, border:"1px solid", marginBottom:10, transition:"all 0.25s", cursor:"default" },
+  pBar:  { height:4, borderRadius:4, background:"rgba(255,255,255,0.06)", marginTop:10, overflow:"hidden" },
+  pFill: { height:"100%", borderRadius:4, transition:"width 0.8s cubic-bezier(0.4,0,0.2,1)" },
+
+  // ── AI badge ─────────────────────────────────────────────────
+  aiBdg: { display:"inline-flex", alignItems:"center", gap:6, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:20, padding:"7px 16px", fontSize:11, color:"rgba(255,255,255,0.5)", margin:"0 14px 12px", letterSpacing:0.5 },
+
+  // ── Quiz ─────────────────────────────────────────────────────
   qWrap: { maxWidth:600, margin:"0 auto", padding:"20px 16px 80px" },
   qHead: { display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 },
-  pausB: { background:"none", border:"1px solid rgba(255,255,255,0.08)", color:"rgba(255,255,255,0.4)", padding:"8px 16px", borderRadius:20, cursor:"pointer", fontSize:12, fontFamily:"inherit", transition:"all 0.2s" },
+  pausB: { background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.08)", color:"rgba(255,255,255,0.5)", padding:"9px 18px", borderRadius:20, cursor:"pointer", fontSize:12, fontFamily:"inherit", transition:"all 0.2s" },
   qInfo: { textAlign:"center" },
-  qLvl:  { fontSize:12, color:gold, fontWeight:700 },
+  qLvl:  { fontSize:13, color:"#63CAB7", fontWeight:700, fontFamily:"'Sora',sans-serif" },
   qCnt:  { fontSize:11, color:"rgba(255,255,255,0.25)", marginTop:2 },
-  tmrB:  { fontFamily:"'Outfit',monospace", fontSize:17, fontWeight:800, border:"2px solid", borderRadius:"50%", width:48, height:48, display:"flex", alignItems:"center", justifyContent:"center", transition:"all 0.3s" },
-  prgBg: { height:2, background:"rgba(255,255,255,0.05)", borderRadius:2, marginBottom:20 },
-  prgFl: { height:"100%", borderRadius:2, transition:"width 0.5s ease", background:`linear-gradient(90deg,${gold},#F5A623)` },
-  strkB: { textAlign:"center", color:"#FF7043", fontWeight:700, fontSize:12, marginBottom:10 },
-  scLiv: { textAlign:"right", fontSize:15, color:gold, fontWeight:800, marginBottom:14 },
-  
-  // Loading
+  tmrB:  { fontFamily:"'Sora',sans-serif", fontSize:18, fontWeight:800, border:"2px solid", borderRadius:"50%", width:50, height:50, display:"flex", alignItems:"center", justifyContent:"center", transition:"all 0.3s" },
+  prgBg: { height:4, background:"rgba(255,255,255,0.06)", borderRadius:4, marginBottom:20 },
+  prgFl: { height:"100%", borderRadius:4, transition:"width 0.5s ease", background:"linear-gradient(90deg,#63CAB7,#4FACFE)" },
+  strkB: { textAlign:"center", color:"#FF8C69", fontWeight:700, fontSize:12, marginBottom:10 },
+  scLiv: { textAlign:"right", fontSize:15, color:"#63CAB7", fontWeight:800, marginBottom:14 },
+
+  // ── Loading ──────────────────────────────────────────────────
   loadWrap: { textAlign:"center", padding:"100px 20px" },
-  loadIcon: { fontSize:48, marginBottom:24, display:"block", animation:"spin 3s linear infinite" },
-  loadTxt:  { fontSize:18, color:"rgba(255,215,0,0.8)", fontWeight:700, marginBottom:8, fontFamily:"'Playfair Display',serif" },
-  loadSub:  { fontSize:12, color:"rgba(255,255,255,0.2)", letterSpacing:2 },
-  
-  // Question
-  qBox:  { background:"rgba(255,255,255,0.025)", border:"1px solid rgba(255,255,255,0.06)", borderRadius:24, padding:"28px 22px", marginBottom:16 },
-  topic: { fontSize:9, color:"rgba(255,255,255,0.2)", textAlign:"center", marginBottom:14, letterSpacing:4, textTransform:"uppercase" },
-  qTxt:  { fontSize:"clamp(17px,4vw,22px)", lineHeight:1.65, margin:0, textAlign:"center", color:"#F0F0FF", fontWeight:500 },
-  
-  // Options
-  opG:   { display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 },
-  opB:   { border:"1px solid rgba(255,255,255,0.07)", borderRadius:18, padding:"16px 14px", fontSize:13, cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center", gap:10, transition:"all 0.2s", lineHeight:1.45, fontFamily:"inherit", fontWeight:500, background:"rgba(255,255,255,0.025)" },
-  opL:   { background:"rgba(255,255,255,0.06)", borderRadius:"50%", width:28, height:28, minWidth:28, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, flexShrink:0 },
-  expB:  { background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.06)", borderRadius:16, padding:"14px 18px", fontSize:13, lineHeight:1.7, color:"rgba(255,255,255,0.5)", marginBottom:16 },
-  nxtB:  { display:"block", width:"100%", background:`linear-gradient(135deg,#FFD700,#F5A623)`, color:"#06060F", border:"none", padding:"17px", borderRadius:28, fontWeight:800, cursor:"pointer", fontSize:15, fontFamily:"inherit", letterSpacing:0.3, boxShadow:"0 8px 32px rgba(255,215,0,0.2)" },
-  errBox:{ background:"rgba(255,60,60,0.06)", border:"1px solid rgba(255,60,60,0.15)", borderRadius:18, padding:"20px", textAlign:"center", marginTop:24 },
-  
-  // Level complete
-  lcCard:{ maxWidth:420, margin:"40px auto", background:"rgba(255,255,255,0.025)", border:"1px solid rgba(255,215,0,0.12)", borderRadius:28, padding:"40px 24px", textAlign:"center" },
-  lcEmo: { fontSize:56, marginBottom:16, display:"block" },
-  lcTit: { fontSize:24, color:gold, marginBottom:20, fontWeight:700, fontFamily:"'Playfair Display',serif" },
+  loadIcon: { fontSize:52, marginBottom:24, display:"block" },
+  loadTxt:  { fontSize:20, color:"#fff", fontWeight:700, marginBottom:8, fontFamily:"'Sora',sans-serif" },
+  loadSub:  { fontSize:12, color:"rgba(255,255,255,0.25)", letterSpacing:2 },
+
+  // ── Question card ────────────────────────────────────────────
+  qBox:  { background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:28, padding:"32px 24px", marginBottom:18 },
+  topic: { fontSize:9, color:"rgba(255,255,255,0.2)", textAlign:"center", marginBottom:16, letterSpacing:4, textTransform:"uppercase" },
+  qTxt:  { fontSize:"clamp(18px,4.5vw,24px)", lineHeight:1.6, margin:0, textAlign:"center", color:"#fff", fontWeight:600, fontFamily:"'Sora',sans-serif" },
+
+  // ── Answer options ───────────────────────────────────────────
+  opG:   { display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:18 },
+  opB:   { border:"1px solid rgba(255,255,255,0.08)", borderRadius:20, padding:"18px 14px", fontSize:14, cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center", gap:10, transition:"all 0.2s", lineHeight:1.45, fontFamily:"inherit", fontWeight:500, background:"rgba(255,255,255,0.04)" },
+  opL:   { background:"rgba(255,255,255,0.08)", borderRadius:"50%", width:30, height:30, minWidth:30, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, flexShrink:0 },
+  expB:  { background:"rgba(99,202,183,0.06)", border:"1px solid rgba(99,202,183,0.15)", borderRadius:18, padding:"16px 18px", fontSize:13, lineHeight:1.7, color:"rgba(255,255,255,0.55)", marginBottom:18 },
+  nxtB:  { display:"block", width:"100%", background:"linear-gradient(135deg,#63CAB7,#4FACFE)", color:"#fff", border:"none", padding:"18px", borderRadius:28, fontWeight:800, cursor:"pointer", fontSize:16, fontFamily:"'Sora',sans-serif", letterSpacing:0.3, boxShadow:"0 8px 32px rgba(99,202,183,0.25)" },
+  errBox:{ background:"rgba(255,60,60,0.06)", border:"1px solid rgba(255,60,60,0.15)", borderRadius:20, padding:"20px", textAlign:"center", marginTop:24 },
+
+  // ── Level complete ───────────────────────────────────────────
+  lcCard:{ maxWidth:420, margin:"32px auto", background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:32, padding:"40px 24px", textAlign:"center" },
+  lcEmo: { fontSize:64, marginBottom:16, display:"block" },
+  lcTit: { fontSize:26, color:"#fff", marginBottom:22, fontWeight:800, fontFamily:"'Sora',sans-serif" },
   lcStat:{ display:"flex", justifyContent:"space-around", marginBottom:24 },
-  lcN:   { fontSize:32, color:gold, display:"block", fontWeight:800 },
-  lcL:   { fontSize:11, color:"rgba(255,255,255,0.25)", marginTop:4, letterSpacing:1 },
-  svNot: { background:"rgba(255,215,0,0.04)", border:"1px solid rgba(255,215,0,0.12)", borderRadius:16, padding:"14px 18px", fontSize:13, color:"rgba(255,215,0,0.6)", marginBottom:22 },
-  
-  // Buttons
-  primB: { display:"block", width:"100%", background:`linear-gradient(135deg,#FFD700,#F5A623)`, color:"#06060F", border:"none", padding:"16px", borderRadius:28, fontWeight:800, cursor:"pointer", fontSize:15, fontFamily:"inherit", marginBottom:10, boxShadow:"0 6px 24px rgba(255,215,0,0.2)", letterSpacing:0.3 },
-  ghstB: { display:"block", width:"100%", background:"none", border:"1px solid rgba(255,255,255,0.07)", color:"rgba(255,255,255,0.4)", padding:"14px", borderRadius:28, cursor:"pointer", fontSize:13, fontFamily:"inherit", transition:"all 0.2s" },
-  
-  // Leaderboard
-  lbW:   { margin:"0 14px", background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.05)", borderRadius:22, padding:"18px" },
-  lbTbs: { display:"flex", gap:8, marginBottom:16, background:"rgba(255,255,255,0.03)", borderRadius:14, padding:4 },
-  lbTb:  { flex:1, padding:"10px", borderRadius:10, border:"none", fontSize:12, cursor:"pointer", fontWeight:700, textAlign:"center", fontFamily:"inherit", transition:"all 0.2s" },
-  lbRw:  { display:"flex", alignItems:"center", gap:12, padding:"12px 14px", borderRadius:14, marginBottom:4 },
-  lbRk:  { width:28, textAlign:"center", fontWeight:800, fontSize:14 },
-  
-  // Register
-  regC:  { maxWidth:380, margin:"60px auto 0", background:"rgba(255,255,255,0.025)", border:"1px solid rgba(255,215,0,0.1)", borderRadius:28, padding:"40px 28px", textAlign:"center", position:"relative", zIndex:1 },
-  inp:   { width:"100%", background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:16, padding:"15px 18px", color:"#fff", fontSize:15, outline:"none", fontFamily:"inherit", marginBottom:12, transition:"border 0.2s", boxSizing:"border-box" },
-  footer:{ textAlign:"center", fontSize:11, color:"rgba(255,255,255,0.05)", padding:"30px 20px 0" },
+  lcN:   { fontSize:36, color:"#63CAB7", display:"block", fontWeight:800, fontFamily:"'Sora',sans-serif" },
+  lcL:   { fontSize:11, color:"rgba(255,255,255,0.3)", marginTop:4, letterSpacing:1 },
+  svNot: { background:"rgba(99,202,183,0.06)", border:"1px solid rgba(99,202,183,0.15)", borderRadius:16, padding:"14px 18px", fontSize:13, color:"rgba(99,202,183,0.8)", marginBottom:22 },
+
+  // ── Buttons ──────────────────────────────────────────────────
+  primB: { display:"block", width:"100%", background:"linear-gradient(135deg,#63CAB7,#4FACFE)", color:"#fff", border:"none", padding:"17px", borderRadius:28, fontWeight:800, cursor:"pointer", fontSize:15, fontFamily:"'Sora',sans-serif", marginBottom:10, boxShadow:"0 6px 24px rgba(99,202,183,0.25)", letterSpacing:0.3 },
+  ghstB: { display:"block", width:"100%", background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", color:"rgba(255,255,255,0.45)", padding:"15px", borderRadius:28, cursor:"pointer", fontSize:13, fontFamily:"inherit", transition:"all 0.2s" },
+
+  // ── Leaderboard ──────────────────────────────────────────────
+  lbW:   { margin:"0 14px", background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)", borderRadius:24, padding:"18px" },
+  lbTbs: { display:"flex", gap:4, marginBottom:16, background:"rgba(255,255,255,0.04)", borderRadius:14, padding:4 },
+  lbTb:  { flex:1, padding:"10px", borderRadius:10, border:"none", fontSize:12, cursor:"pointer", fontWeight:700, textAlign:"center", fontFamily:"'DM Sans',sans-serif", transition:"all 0.2s" },
+  lbRw:  { display:"flex", alignItems:"center", gap:12, padding:"12px 14px", borderRadius:16, marginBottom:4 },
+  lbRk:  { width:28, textAlign:"center", fontWeight:800, fontSize:14, fontFamily:"'Sora',sans-serif" },
+
+  // ── Register ─────────────────────────────────────────────────
+  regC:  { maxWidth:380, margin:"60px auto 0", background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:32, padding:"40px 28px", textAlign:"center", position:"relative", zIndex:1, backdropFilter:"blur(20px)" },
+  inp:   { width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:18, padding:"16px 18px", color:"#fff", fontSize:15, outline:"none", fontFamily:"'DM Sans',sans-serif", marginBottom:12, transition:"all 0.2s", boxSizing:"border-box" },
+  footer:{ textAlign:"center", fontSize:11, color:"rgba(255,255,255,0.04)", padding:"30px 20px 0" },
 };
 
   // ─────────────────────────────────────────────────────────
@@ -1293,7 +1297,7 @@ const accent  = "#7C6FE0";  // soft indigo accent
       <div style={{fontSize:48}}>✝️</div>
       <div style={{color:gold, fontSize:16, fontWeight:700}}>{t.signingIn}</div>
       <div style={{display:"flex", gap:8}}>
-        {[0,1,2].map(i => <div key={i} style={{width:10,height:10,borderRadius:"50%",background:gold,animation:`pulse 1.2s ${i*0.4}s infinite`}}/>)}
+        {[0,1,2].map(i => <div key={i} style={{width:10,height:10,borderRadius:"50%",background:"#63CAB7",animation:`pulse 1.2s ${i*0.4}s infinite`}}/>)}
       </div>
     </div>
   );
@@ -1301,9 +1305,9 @@ const accent  = "#7C6FE0";  // soft indigo accent
   if (screen === "register") return (
     <div style={S.app}>
       <style>{``}</style>
-      <div style={{position:"fixed",top:"-20%",left:"50%",transform:"translateX(-50%)",width:700,height:700,background:"radial-gradient(ellipse,rgba(255,215,0,0.04) 0%,transparent 60%)",pointerEvents:"none",zIndex:0,animation:"glowPulse 4s ease-in-out infinite"}}/>
-      <div style={{position:"fixed",bottom:"-10%",right:"-10%",width:500,height:500,background:"radial-gradient(ellipse,rgba(255,215,0,0.025) 0%,transparent 60%)",pointerEvents:"none",zIndex:0}}/>
-      <div style={{position:"fixed",top:"40%",left:"-5%",width:300,height:300,background:"radial-gradient(ellipse,rgba(100,80,255,0.04) 0%,transparent 60%)",pointerEvents:"none",zIndex:0}}/>>
+      <div style={{position:"fixed",top:"-20%",left:"50%",transform:"translateX(-50%)",width:700,height:700,background:"radial-gradient(ellipse,rgba(99,202,183,0.06) 0%,transparent 60%)",pointerEvents:"none",zIndex:0,animation:"glowPulse 4s ease-in-out infinite"}}/>
+      <div style={{position:"fixed",bottom:"-10%",right:"-10%",width:500,height:500,background:"radial-gradient(ellipse,rgba(79,172,254,0.04) 0%,transparent 60%)",pointerEvents:"none",zIndex:0}}/>
+      <div style={{position:"fixed",top:"40%",left:"-5%",width:300,height:300,background:"radial-gradient(ellipse,rgba(99,202,183,0.03) 0%,transparent 60%)",pointerEvents:"none",zIndex:0}}/>>
       <div style={S.regC}>
         <div style={{fontSize:50,marginBottom:12,filter:"drop-shadow(0 0 20px rgba(245,200,66,0.3))"}}>✝️</div>
 
@@ -1394,7 +1398,7 @@ const accent  = "#7C6FE0";  // soft indigo accent
             <div style={S.loadSub}>Questions uniques · Niveau {lvl.name}</div>
             <div style={{marginTop:24,display:"flex",justifyContent:"center",gap:8}}>
               {[0,1,2].map(i=>(
-                <div key={i} style={{width:8,height:8,borderRadius:"50%",background:gold,animation:`pulse 1.2s ease ${i*0.3}s infinite`}}/>
+                <div key={i} style={{width:8,height:8,borderRadius:"50%",background:"#63CAB7",animation:`pulse 1.2s ease ${i*0.3}s infinite`}}/>
               ))}
             </div>
           </div>
@@ -1440,11 +1444,11 @@ const accent  = "#7C6FE0";  // soft indigo accent
             {streak >= 2 && <div style={S.strkB}>{t.streak} {streak} !</div>}
             <div style={S.scLiv}>⭐ {dailyProgress.todayTotalScore} pts</div>
           </div>
-          <div style={S.qBox}>
+          <div style={S.qBox} className="fade-in">
             {q.topic && <div style={S.topic}>📚 {q.topic}</div>}
             <p style={S.qTxt}>{q.q}</p>
           </div>
-          <div style={S.opG}>
+          <div style={S.opG} className="slide-up">
             {q.opts.map((opt, i) => {
               let bg="rgba(255,255,255,0.04)", border="1px solid rgba(255,255,255,0.08)", color="#CCC";
               if (answered) {
@@ -2030,7 +2034,7 @@ const accent  = "#7C6FE0";  // soft indigo accent
           <span style={S.pathT}>🌅 {new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"})}</span>
           <span style={S.cdBdg}>⏰ {countdown}</span>
         </div>
-        <div style={S.todS}>
+        <div style={S.todS} className="slide-up">
           <span style={{...S.todN, background:`linear-gradient(135deg,${gold2},${gold})`, WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent'}}>{dp.todayTotalScore}</span>
           <span style={S.todL}>{t.ptsToday2}</span>
         </div>
@@ -2042,9 +2046,9 @@ const accent  = "#7C6FE0";  // soft indigo accent
           const isActive   = lvl.id === dp.currentLevel && !isDone;
           const pct        = isDone ? 100 : (lp.answeredCount / lvl.questionsPerDay * 100);
 
-          let borderColor = "rgba(255,255,255,0.05)";
-          let bgColor     = "rgba(255,255,255,0.01)";
-          let statusColor = "#333";
+          let borderColor = "rgba(255,255,255,0.06)";
+          let bgColor     = "rgba(255,255,255,0.02)";
+          let statusColor = "rgba(255,255,255,0.2)";
           let statusText  = "🔒";
           let cursor      = "default";
 
@@ -2056,7 +2060,7 @@ const accent  = "#7C6FE0";  // soft indigo accent
           else if (isUnlocked){ borderColor=lvl.color+"33"; statusColor=lvl.color; statusText=t.available; cursor="pointer"; }
 
           return (
-            <div key={lvl.id} className="level-card" style={{...S.lvlSt, background:bgColor, borderColor, opacity:isUnlocked?1:0.3, cursor}}
+            <div key={lvl.id} className={`level-card ${isActive?"active-level":""}`} style={{...S.lvlSt, background:bgColor, borderColor, opacity:isUnlocked?1:0.3, cursor}}
               onClick={()=>{ if(!isUnlocked||isDone||isBlocked) return; if(!player){setScreen("register");return;} startLevel(lvl.id); }}>
               <span style={S.stIco}>{lvl.emoji}</span>
               <div style={S.stInf}>
@@ -2084,10 +2088,10 @@ const accent  = "#7C6FE0";  // soft indigo accent
       <div id="lb-section" style={S.secT}>{t.leaderboard} {saving && "💾"}</div>
       <div style={S.lbW}>
         <div style={S.lbTbs}>
-          <button onClick={()=>setLbTab("today")} style={{...S.lbTb, background:lbTab==="today"?"rgba(255,215,0,0.1)":"rgba(255,255,255,0.02)", borderColor:lbTab==="today"?gold:"rgba(255,255,255,0.07)", color:lbTab==="today"?gold:"#666"}}>
+          <button onClick={()=>setLbTab("today")} style={{...S.lbTb, background:lbTab==="today"?"rgba(99,202,183,0.12)":"transparent", color:lbTab==="today"?"#63CAB7":"rgba(255,255,255,0.3)"}}>
             {t.todayBest}
           </button>
-          <button onClick={()=>setLbTab("total")} style={{...S.lbTb, background:lbTab==="total"?"rgba(255,215,0,0.1)":"rgba(255,255,255,0.02)", borderColor:lbTab==="total"?gold:"rgba(255,255,255,0.07)", color:lbTab==="total"?gold:"#666"}}>
+          <button onClick={()=>setLbTab("total")} style={{...S.lbTb, background:lbTab==="total"?"rgba(99,202,183,0.12)":"transparent", color:lbTab==="total"?"#63CAB7":"rgba(255,255,255,0.3)"}}>
             {t.worldBest}
           </button>
         </div>
