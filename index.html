@@ -645,20 +645,44 @@ function LogosChallenge() {
   // Read referrer from URL
   const urlRef = new URLSearchParams(window.location.search).get("ref") || null;
   
-  // Handle Google OAuth callback
+  // Auto-login on app start
   useEffect(() => {
     const hash = window.location.hash;
     if (hash && hash.includes("access_token")) {
+      // Coming back from Google OAuth
       const params = new URLSearchParams(hash.replace("#", "?"));
       const accessToken = params.get("access_token");
       if (accessToken) {
         setAuthLoading(true);
-        // Clean URL
         window.history.replaceState({}, document.title, "/");
         handleGoogleCallback(accessToken);
+        return;
       }
     }
+    // Try auto-login from localStorage
+    const savedId = localStorage.getItem("lc_player_id");
+    const savedPseudo = localStorage.getItem("lc_pseudo");
+    if (savedId && savedPseudo) {
+      setAuthLoading(true);
+      autoLogin(savedId, savedPseudo);
+    }
   }, []);
+
+  async function autoLogin(playerId, pseudo) {
+    try {
+      const p = await supaFetch(`players?id=eq.${playerId}&select=*`);
+      if (p && p.length > 0) {
+        await loadPlayerSession(p[0]);
+      } else {
+        // Player not found - clear storage
+        localStorage.removeItem("lc_player_id");
+        localStorage.removeItem("lc_pseudo");
+      }
+    } catch(e) {
+      console.error("Auto-login error:", e);
+    }
+    setAuthLoading(false);
+  }
 
   async function handleGoogleCallback(accessToken) {
     try {
@@ -721,10 +745,11 @@ function LogosChallenge() {
       if (recoverMode) {
         // Try to find existing player by pseudo
         // Try exact match first, then case-insensitive
-        let existing = await supaFetch(`players?pseudo=eq.${pseudoTrimmed}&select=*`);
+        let existing = await supaFetch(`players?pseudo=eq.${pseudoTrimmed}&select=id,pseudo,referred_by,google_id,email`);
         if (!existing || existing.length === 0) {
-          existing = await supaFetch(`players?pseudo=ilike.${pseudoTrimmed}&select=*`);
+          existing = await supaFetch(`players?pseudo=ilike.${pseudoTrimmed}&select=id,pseudo,referred_by,google_id,email`);
         }
+        console.log("Recover search result:", existing, "for pseudo:", pseudoTrimmed);
         if (!existing || existing.length === 0) {
           setRecoverError(t.recoverNotFound);
           return;
@@ -819,6 +844,23 @@ function LogosChallenge() {
     setEditingPseudo(false);
     setShowProfile(true);
     await loadPlayerRank();
+  }
+
+  function logout() {
+    setPlayer(null);
+    setGoogleUser(null);
+    setDailyProgress({ levelProgress: {}, todayTotalScore: 0 });
+    setCurrentMaxLevel(1);
+    setPlayerStreak(0);
+    setPlayerBadges([]);
+    setReferralCount(0);
+    setShowProfile(false);
+    try {
+      localStorage.removeItem("lc_player_id");
+      localStorage.removeItem("lc_pseudo");
+      localStorage.removeItem("lc_google_id");
+    } catch(e) {}
+    setScreen("home");
   }
 
   // ── Language toggle ─────────────────────────────────────────
@@ -1511,6 +1553,128 @@ function LogosChallenge() {
 
   // BADGES SCREEN
   // ─────────────────────────────────────────────────────────
+  if (showProfile) return (
+    <div style={{...S.app, overflowY:"auto"}}>
+      <style>{`*{box-sizing:border-box}`}</style>
+      <div style={S.glow}/>
+      <div style={{maxWidth:440, margin:"0 auto", padding:"20px 16px 40px"}}>
+
+        {/* Header */}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+          <h2 style={{color:gold,margin:0,fontSize:18}}>{t.profileTitle}</h2>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <button onClick={()=>{if(window.confirm(lang==="fr"?"Se déconnecter ?":"Log out?")) logout();}}
+              style={{background:"rgba(255,50,50,0.1)",border:"1px solid rgba(255,50,50,0.3)",borderRadius:8,padding:"5px 10px",color:"#FF6B6B",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>
+              🚪 {lang==="fr"?"Déco":"Logout"}
+            </button>
+            <button onClick={()=>setShowProfile(false)} style={{background:"none",border:"none",color:"#888",fontSize:24,cursor:"pointer",lineHeight:1}}>✕</button>
+          </div>
+        </div>
+
+        {/* Avatar + pseudo */}
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",marginBottom:20,background:"rgba(255,215,0,0.04)",border:"1px solid rgba(255,215,0,0.12)",borderRadius:16,padding:20}}>
+          <div style={{width:72,height:72,borderRadius:"50%",background:"linear-gradient(135deg,#1a1a3e,#2a2a5e)",border:`3px solid ${gold}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,marginBottom:10}}>
+            {player.pseudo?.[0]?.toUpperCase() || "?"}
+          </div>
+          {googleUser && <p style={{color:"#666",fontSize:11,margin:"0 0 8px"}}>{googleUser.email}</p>}
+          {!editingPseudo ? (
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <span style={{color:"#fff",fontWeight:700,fontSize:20}}>{player.pseudo}</span>
+              <button onClick={()=>{setEditingPseudo(true);setNewPseudo(player.pseudo);}}
+                style={{background:"rgba(255,215,0,0.1)",border:"1px solid rgba(255,215,0,0.3)",borderRadius:8,padding:"4px 10px",color:gold,fontSize:11,cursor:"pointer"}}>
+                ✏️
+              </button>
+            </div>
+          ) : (
+            <div style={{width:"100%",display:"flex",flexDirection:"column",gap:8}}>
+              <input style={{...S.inp,textAlign:"center",fontSize:16,fontWeight:700}} value={newPseudo}
+                onChange={e=>setNewPseudo(e.target.value)} maxLength={20}
+                onKeyDown={e=>e.key==="Enter"&&updatePseudo()}/>
+              <div style={{display:"flex",gap:8}}>
+                <button onClick={updatePseudo} style={{flex:1,background:gold,border:"none",borderRadius:10,padding:"10px",color:"#000",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t.savePseudo}</button>
+                <button onClick={()=>setEditingPseudo(false)} style={{flex:1,background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,padding:"10px",color:"#888",cursor:"pointer",fontFamily:"inherit"}}>{t.back}</button>
+              </div>
+            </div>
+          )}
+          {pseudoMsg && <p style={{color:pseudoMsg.includes("✅")||pseudoMsg.includes("🔗")?"#4CAF50":"#FF4444",fontSize:12,marginTop:8}}>{pseudoMsg}</p>}
+        </div>
+
+        {/* Ranks */}
+        <div style={{background:"rgba(255,215,0,0.05)",border:"1px solid rgba(255,215,0,0.15)",borderRadius:14,padding:16,marginBottom:14}}>
+          <p style={{color:gold,fontWeight:700,fontSize:13,margin:"0 0 12px"}}>🏆 {t.myRank}</p>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+            <div style={{textAlign:"center",background:"rgba(0,0,0,0.2)",borderRadius:10,padding:"12px 8px"}}>
+              <div style={{fontSize:26,fontWeight:700,color:gold}}>{playerRank.world ? `#${playerRank.world}` : "—"}</div>
+              <div style={{fontSize:11,color:"#888",marginTop:2}}>{t.worldRank}</div>
+            </div>
+            <div style={{textAlign:"center",background:"rgba(0,0,0,0.2)",borderRadius:10,padding:"12px 8px"}}>
+              <div style={{fontSize:26,fontWeight:700,color:"#4FC3F7"}}>{playerRank.today ? `#${playerRank.today}` : "—"}</div>
+              <div style={{fontSize:11,color:"#888",marginTop:2}}>{t.dailyRank}</div>
+            </div>
+          </div>
+          <button onClick={()=>{setShowProfile(false); setTimeout(()=>document.getElementById("lb-section")?.scrollIntoView({behavior:"smooth"}),200);}}
+            style={{width:"100%",background:"rgba(255,215,0,0.07)",border:"1px solid rgba(255,215,0,0.2)",borderRadius:10,padding:"9px",color:gold,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
+            📊 {lang==="fr"?"Voir le classement complet":"See full leaderboard"}
+          </button>
+        </div>
+
+        {/* Stats */}
+        <div style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:14,padding:16,marginBottom:14}}>
+          <p style={{color:"#AAA",fontWeight:700,fontSize:13,margin:"0 0 12px"}}>📈 {t.myStats}</p>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            {[
+              {label:t.totalPoints, value:(lbTotal.find(r=>r.pseudo===player.pseudo)?.totalPts||0).toLocaleString(), icon:"⭐"},
+              {label:t.gamesPlayed2, value:lbTotal.find(r=>r.pseudo===player.pseudo)?.gamesPlayed||0, icon:"🎮"},
+              {label:"Streak", value:`${playerStreak} ${lang==="fr"?"j":"d"}`, icon:"🔥"},
+              {label:t.bestLevel, value:`Niv.${currentMaxLevel}`, icon:"📖"},
+            ].map((s,i) => (
+              <div key={i} style={{background:"rgba(0,0,0,0.2)",borderRadius:10,padding:"12px",textAlign:"center"}}>
+                <div style={{fontSize:22}}>{s.icon}</div>
+                <div style={{fontSize:18,fontWeight:700,color:"#fff",marginTop:4}}>{s.value}</div>
+                <div style={{fontSize:10,color:"#666",marginTop:2}}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Badges */}
+        <div style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:14,padding:16,marginBottom:14}}>
+          <p style={{color:"#AAA",fontWeight:700,fontSize:13,margin:"0 0 12px"}}>🏅 {t.myBadges} ({playerBadges.length}/10)</p>
+          {playerBadges.length === 0 ? (
+            <p style={{color:"#555",fontSize:12,margin:0}}>{lang==="fr"?"Jouez pour débloquer des badges !":"Play to unlock badges!"}</p>
+          ) : (
+            <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+              {playerBadges.map(bid => {
+                const bn = t.badgeNames[bid];
+                return bn ? (
+                  <div key={bid} title={bn[2]} style={{background:"rgba(255,215,0,0.1)",border:"1px solid rgba(255,215,0,0.3)",borderRadius:8,padding:"6px 10px",fontSize:12,color:gold}}>
+                    {bn[0]} {bn[1]}
+                  </div>
+                ) : null;
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Invite */}
+        <div style={{background:"rgba(37,211,102,0.05)",border:"1px solid rgba(37,211,102,0.2)",borderRadius:14,padding:16}}>
+          <p style={{color:"#25D366",fontWeight:700,fontSize:13,margin:"0 0 12px"}}>📲 {t.inviteFriends}</p>
+          <a href={`https://wa.me/?text=${encodeURIComponent(t.shareAppMsg("https://logoschallenge.vercel.app?ref="+player.pseudo))}`}
+            target="_blank" rel="noopener noreferrer" style={{textDecoration:"none",display:"block",marginBottom:8}}>
+            <button style={{width:"100%",background:"linear-gradient(135deg,#0a5c52,#128C7E)",border:"none",borderRadius:12,padding:"13px",color:"#fff",fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+              💬 {lang==="fr"?"Partager sur WhatsApp":"Share on WhatsApp"}
+            </button>
+          </a>
+          <button onClick={()=>{try{navigator.clipboard.writeText("https://logoschallenge.vercel.app?ref="+player.pseudo);}catch(e){} setPseudoMsg("🔗 Lien copié !");setTimeout(()=>setPseudoMsg(""),2000);}}
+            style={{width:"100%",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:12,padding:"11px",color:"#AAA",fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>
+            📋 {t.copyLink}
+          </button>
+        </div>
+
+      </div>
+    </div>
+  );
+
   if (showBadges) {
     const earnedIds = playerBadges;
     return (
