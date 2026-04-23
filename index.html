@@ -4,6 +4,9 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>LogosChallenge — Au commencement était le Verbe</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Cinzel:wght@600;700&display=swap" rel="stylesheet"/>
   <meta name="description" content="Quiz biblique progressif — 6 niveaux, questions IA infinies, classement mondial"/>
 
   <!-- PWA -->
@@ -20,9 +23,35 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #07071c; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    @keyframes pulse { 0%,100%{opacity:.4} 50%{opacity:1} }
+    body { background: #06060F; -webkit-font-smoothing: antialiased; }
+    
+    @keyframes spin { to { transform: rotate(360deg) } }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.8)} }
+    @keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+    @keyframes floatY { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+    @keyframes glowPulse { 0%,100%{opacity:0.15} 50%{opacity:0.4} }
+    
+    ::-webkit-scrollbar { width: 3px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,215,0,0.12); border-radius: 4px; }
+    
+    input:focus { border-color: rgba(255,215,0,0.35) !important; }
+    
+    .opt-btn { transition: all 0.18s ease !important; }
+    .opt-btn:hover:not(:disabled) { transform: translateY(-2px) !important; border-color: rgba(255,215,0,0.25) !important; background: rgba(255,215,0,0.05) !important; }
+    .opt-btn:active:not(:disabled) { transform: scale(0.97) !important; }
+    
+    .level-card { transition: all 0.25s ease !important; }
+    .level-card:hover { transform: translateX(3px) !important; }
+    
+    .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 12px 40px rgba(255,215,0,0.25) !important; }
+    .btn-primary:active { transform: scale(0.98); }
+    
+    .nav-chip:hover { background: rgba(255,215,0,0.1) !important; }
+    
+    .fade-in { animation: fadeIn 0.4s ease; }
+    .slide-up { animation: slideUp 0.4s ease; }
   </style>
 </head>
 <body>
@@ -1121,77 +1150,111 @@ function LogosChallenge() {
   // ─────────────────────────────────────────────────────────
   // STYLES
   // ─────────────────────────────────────────────────────────
-  const gold = "#FFD700";
+  // ─── Design tokens ──────────────────────────────────────────
+const gold    = "#F5C842";
+const gold2   = "#E8A020";
+const navy    = "#080818";
+const navy2   = "#0C0C22";
+const card    = "rgba(255,255,255,0.035)";
+const border  = "rgba(255,255,255,0.07)";
+const accent  = "#7C6FE0";  // soft indigo accent
   const S = {
-    app:   { minHeight:"100vh", background:"linear-gradient(160deg,#07071c 0%,#0f0f2c 55%,#071520 100%)", color:"#EEE", fontFamily:"Georgia,serif", overflowX:"hidden", paddingBottom:60 },
-    glow:  { position:"fixed", top:"5%", left:"50%", transform:"translateX(-50%)", width:600, height:600, background:"radial-gradient(circle,rgba(255,215,0,0.04) 0%,transparent 70%)", pointerEvents:"none", zIndex:0 },
-    nav:   { display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 20px", borderBottom:"1px solid rgba(255,255,255,0.06)", background:"rgba(7,7,28,0.97)", position:"sticky", top:0, zIndex:100 },
-    navL:  { display:"flex", flexDirection:"column" },
-    navT:  { color:gold, fontSize:18, fontWeight:700, letterSpacing:1 },
-    navS:  { fontSize:9, color:"#444", letterSpacing:3, textTransform:"uppercase" },
-    chip:  { background:"rgba(255,215,0,0.07)", border:"1px solid rgba(255,215,0,0.2)", borderRadius:16, padding:"7px 14px", textAlign:"right", cursor:"pointer" },
-    chipN: { fontSize:13, fontWeight:700, color:gold },
-    chipS: { fontSize:10, color:"#777" },
-    joinB: { background:`linear-gradient(135deg,#9A7209,${gold})`, color:"#07071c", border:"none", padding:"10px 18px", borderRadius:20, fontWeight:700, cursor:"pointer", fontSize:13 },
-    secT:  { textAlign:"center", fontSize:11, color:gold, letterSpacing:3, textTransform:"uppercase", margin:"26px 0 12px", fontWeight:700 },
-    pathW: { margin:"0 16px", background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.06)", borderRadius:20, padding:"18px 16px" },
-    pathH: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 },
-    pathT: { fontSize:14, fontWeight:700, color:gold },
-    cdBdg: { fontFamily:"monospace", fontSize:12, color:gold, background:"rgba(255,215,0,0.07)", border:"1px solid rgba(255,215,0,0.18)", borderRadius:10, padding:"4px 10px" },
-    todS:  { textAlign:"center", marginBottom:18 },
-    todN:  { fontFamily:"Georgia,serif", fontSize:40, fontWeight:700, color:gold, display:"block" },
-    todL:  { fontSize:12, color:"#666" },
-    lvlSt: { display:"flex", alignItems:"center", gap:12, padding:"12px 14px", borderRadius:14, border:"1px solid", marginBottom:8, transition:"all 0.2s", cursor:"default" },
-    stIco: { fontSize:26, width:38, textAlign:"center" },
-    stInf: { flex:1 },
-    stNm:  { fontWeight:700, fontSize:14 },
-    stSb:  { fontSize:11, color:"#666", marginTop:2 },
-    stSt:  { fontSize:12, fontWeight:700, textAlign:"right", minWidth:80 },
-    pBar:  { height:4, borderRadius:2, background:"rgba(255,255,255,0.07)", marginTop:6, overflow:"hidden" },
-    pFill: { height:"100%", borderRadius:2, transition:"width 0.5s" },
-    aiBdg: { display:"inline-flex", alignItems:"center", gap:6, background:"rgba(155,127,212,0.12)", border:"1px solid rgba(155,127,212,0.3)", borderRadius:20, padding:"6px 14px", fontSize:12, color:"#C4A6FF", margin:"0 16px 8px" },
-    qWrap: { maxWidth:620, margin:"0 auto", padding:"16px 16px 40px" },
-    qHead: { display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 },
-    pausB: { background:"none", border:"1px solid rgba(255,255,255,0.12)", color:"#888", padding:"6px 12px", borderRadius:20, cursor:"pointer", fontSize:12, fontFamily:"inherit" },
-    qInfo: { textAlign:"center" },
-    qLvl:  { fontSize:12, color:gold, fontWeight:700 },
-    qCnt:  { fontSize:11, color:"#555" },
-    tmrB:  { fontFamily:"monospace", fontSize:20, fontWeight:700, border:"2px solid", borderRadius:50, width:44, height:44, display:"flex", alignItems:"center", justifyContent:"center", transition:"all 0.3s" },
-    prgBg: { height:4, background:"rgba(255,255,255,0.07)", borderRadius:2, marginBottom:14 },
-    prgFl: { height:"100%", borderRadius:2, transition:"width 0.4s" },
-    strkB: { textAlign:"center", color:"#FF6B35", fontWeight:700, fontSize:12, marginBottom:8 },
-    scLiv: { textAlign:"right", fontSize:13, color:gold, fontWeight:700, marginBottom:10 },
-    loadWrap: { textAlign:"center", padding:"60px 20px" },
-    loadIcon: { fontSize:42, marginBottom:16, display:"block", animation:"spin 2s linear infinite" },
-    loadTxt:  { fontSize:15, color:"#C4A6FF", fontWeight:700, marginBottom:8 },
-    loadSub:  { fontSize:12, color:"#555" },
-    qBox:  { background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.09)", borderRadius:18, padding:"22px", marginBottom:16 },
-    topic: { fontSize:10, color:"#555", textAlign:"center", marginBottom:10, letterSpacing:2, textTransform:"uppercase" },
-    qTxt:  { fontSize:"clamp(15px,3vw,19px)", lineHeight:1.65, margin:0, textAlign:"center", color:"#FFF" },
-    opG:   { display:"grid", gridTemplateColumns:"1fr 1fr", gap:9, marginBottom:12 },
-    opB:   { border:"1px solid", borderRadius:12, padding:"13px 10px", fontSize:13, cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center", gap:8, transition:"all 0.2s", lineHeight:1.4, fontFamily:"inherit" },
-    opL:   { background:"rgba(255,255,255,0.08)", borderRadius:"50%", width:24, height:24, minWidth:24, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700 },
-    expB:  { background:"rgba(255,255,255,0.04)", border:"1px solid", borderRadius:12, padding:"12px 14px", fontSize:13, lineHeight:1.65, color:"#CCC", marginBottom:12 },
-    nxtB:  { display:"block", width:"100%", background:`linear-gradient(135deg,#9A7209,${gold})`, color:"#07071c", border:"none", padding:"13px", borderRadius:24, fontWeight:700, cursor:"pointer", fontSize:14, fontFamily:"inherit" },
-    errBox:{ background:"rgba(255,107,107,0.1)", border:"1px solid rgba(255,107,107,0.3)", borderRadius:14, padding:"16px", textAlign:"center", marginTop:20 },
-    lcCard:{ maxWidth:460, margin:"40px auto", background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,215,0,0.18)", borderRadius:22, padding:"34px 22px", textAlign:"center", position:"relative", zIndex:1 },
-    lcEmo: { fontSize:52, marginBottom:12, display:"block" },
-    lcTit: { fontFamily:"Georgia,serif", fontSize:21, color:gold, marginBottom:16 },
-    lcStat:{ display:"flex", justifyContent:"space-around", marginBottom:18 },
-    lcN:   { fontFamily:"Georgia,serif", fontSize:26, color:gold, display:"block" },
-    lcL:   { fontSize:11, color:"#666" },
-    svNot: { background:"rgba(155,127,212,0.07)", border:"1px solid rgba(155,127,212,0.25)", borderRadius:12, padding:"10px 14px", fontSize:13, color:"#C4A6FF", marginBottom:18 },
-    primB: { display:"block", width:"100%", background:`linear-gradient(135deg,#9A7209,${gold})`, color:"#07071c", border:"none", padding:"13px", borderRadius:24, fontWeight:700, cursor:"pointer", fontSize:14, fontFamily:"inherit", marginBottom:10 },
-    ghstB: { display:"block", width:"100%", background:"none", border:"1px solid rgba(255,255,255,0.1)", color:"#888", padding:"11px", borderRadius:24, cursor:"pointer", fontSize:13, fontFamily:"inherit" },
-    lbW:   { margin:"0 16px", background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.06)", borderRadius:18, padding:"14px" },
-    lbTbs: { display:"flex", gap:8, marginBottom:12 },
-    lbTb:  { flex:1, padding:"8px", borderRadius:10, border:"1px solid", fontSize:12, cursor:"pointer", fontWeight:700, textAlign:"center", fontFamily:"inherit", transition:"all 0.2s" },
-    lbRw:  { display:"flex", alignItems:"center", gap:8, padding:"9px 10px", borderRadius:10, marginBottom:4 },
-    lbRk:  { width:28, textAlign:"center", fontWeight:700, fontSize:14 },
-    regC:  { maxWidth:420, margin:"50px auto", background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,215,0,0.18)", borderRadius:22, padding:"34px 22px", textAlign:"center", position:"relative", zIndex:1 },
-    inp:   { width:"100%", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:12, padding:"13px 16px", color:"#FFF", fontSize:15, outline:"none", fontFamily:"inherit", marginBottom:10 },
-    footer:{ textAlign:"center", fontSize:11, color:"#222", padding:"28px 20px 0", fontStyle:"italic" },
-  };
+  app:   { minHeight:"100vh", background:"#06060F", color:"#E8E8F0", fontFamily:"'Outfit',sans-serif", overflowX:"hidden", paddingBottom:100 },
+  
+  // Nav
+  nav:   { display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 20px", background:"rgba(6,6,15,0.85)", backdropFilter:"blur(24px)", position:"sticky", top:0, zIndex:100, borderBottom:"1px solid rgba(255,255,255,0.04)" },
+  navL:  { display:"flex", flexDirection:"column" },
+  navT:  { color:gold, fontSize:17, fontWeight:700, letterSpacing:0.5, fontFamily:"'Playfair Display',serif" },
+  navS:  { fontSize:9, color:"rgba(255,215,0,0.25)", letterSpacing:5, textTransform:"uppercase", marginTop:2 },
+  chip:  { background:"rgba(255,215,0,0.06)", border:"1px solid rgba(255,215,0,0.15)", borderRadius:24, padding:"8px 16px", textAlign:"right", cursor:"pointer", transition:"all 0.2s" },
+  chipN: { fontSize:13, fontWeight:700, color:"#fff" },
+  chipS: { fontSize:10, color:"rgba(255,215,0,0.5)", marginTop:1 },
+  joinB: { background:"linear-gradient(135deg,#FFD700,#F5A623)", color:"#06060F", border:"none", padding:"10px 20px", borderRadius:24, fontWeight:700, cursor:"pointer", fontSize:13, letterSpacing:0.3, fontFamily:"'Outfit',sans-serif" },
+
+  // Section title
+  secT:  { textAlign:"center", fontSize:9, color:"rgba(255,215,0,0.35)", letterSpacing:5, textTransform:"uppercase", margin:"32px 0 16px", fontWeight:600 },
+
+  // Level cards
+  pathW: { margin:"0 14px 8px", background:"rgba(255,255,255,0.025)", border:"1px solid rgba(255,255,255,0.06)", borderRadius:20, padding:"16px", transition:"all 0.3s", cursor:"default" },
+  pathH: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 },
+  pathT: { fontSize:15, fontWeight:700, color:"#fff" },
+  cdBdg: { fontFamily:"inherit", fontSize:11, color:gold, background:"rgba(255,215,0,0.08)", border:"1px solid rgba(255,215,0,0.15)", borderRadius:20, padding:"3px 10px", fontWeight:600 },
+  
+  // Score display
+  todS:  { textAlign:"center", marginBottom:24, padding:"0 14px" },
+  todN:  { fontSize:64, fontWeight:800, color:gold, display:"block", lineHeight:1, letterSpacing:-2, fontFamily:"'Playfair Display',serif" },
+  todL:  { fontSize:11, color:"rgba(255,255,255,0.25)", marginTop:6, letterSpacing:3, textTransform:"uppercase" },
+  
+  // Level row
+  lvlSt: { display:"flex", alignItems:"center", gap:14, padding:"16px", borderRadius:18, border:"1px solid", marginBottom:8, transition:"all 0.3s", cursor:"default" },
+  stIco: { fontSize:26, width:44, height:44, background:"rgba(255,255,255,0.04)", borderRadius:14, display:"flex", alignItems:"center", justifyContent:"center" },
+  stInf: { flex:1 },
+  stNm:  { fontWeight:700, fontSize:14, color:"#fff" },
+  stSb:  { fontSize:11, color:"rgba(255,255,255,0.3)", marginTop:3 },
+  stSt:  { fontSize:12, fontWeight:700, textAlign:"right", minWidth:72 },
+  pBar:  { height:2, borderRadius:2, background:"rgba(255,255,255,0.05)", marginTop:10, overflow:"hidden" },
+  pFill: { height:"100%", borderRadius:2, transition:"width 0.8s cubic-bezier(0.4,0,0.2,1)" },
+  
+  // AI badge
+  aiBdg: { display:"inline-flex", alignItems:"center", gap:6, background:"rgba(255,215,0,0.05)", border:"1px solid rgba(255,215,0,0.12)", borderRadius:20, padding:"7px 16px", fontSize:11, color:"rgba(255,215,0,0.6)", margin:"0 14px 12px", letterSpacing:0.5 },
+  
+  // Quiz
+  qWrap: { maxWidth:600, margin:"0 auto", padding:"20px 16px 80px" },
+  qHead: { display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 },
+  pausB: { background:"none", border:"1px solid rgba(255,255,255,0.08)", color:"rgba(255,255,255,0.4)", padding:"8px 16px", borderRadius:20, cursor:"pointer", fontSize:12, fontFamily:"inherit", transition:"all 0.2s" },
+  qInfo: { textAlign:"center" },
+  qLvl:  { fontSize:12, color:gold, fontWeight:700 },
+  qCnt:  { fontSize:11, color:"rgba(255,255,255,0.25)", marginTop:2 },
+  tmrB:  { fontFamily:"'Outfit',monospace", fontSize:17, fontWeight:800, border:"2px solid", borderRadius:"50%", width:48, height:48, display:"flex", alignItems:"center", justifyContent:"center", transition:"all 0.3s" },
+  prgBg: { height:2, background:"rgba(255,255,255,0.05)", borderRadius:2, marginBottom:20 },
+  prgFl: { height:"100%", borderRadius:2, transition:"width 0.5s ease", background:`linear-gradient(90deg,${gold},#F5A623)` },
+  strkB: { textAlign:"center", color:"#FF7043", fontWeight:700, fontSize:12, marginBottom:10 },
+  scLiv: { textAlign:"right", fontSize:15, color:gold, fontWeight:800, marginBottom:14 },
+  
+  // Loading
+  loadWrap: { textAlign:"center", padding:"100px 20px" },
+  loadIcon: { fontSize:48, marginBottom:24, display:"block", animation:"spin 3s linear infinite" },
+  loadTxt:  { fontSize:18, color:"rgba(255,215,0,0.8)", fontWeight:700, marginBottom:8, fontFamily:"'Playfair Display',serif" },
+  loadSub:  { fontSize:12, color:"rgba(255,255,255,0.2)", letterSpacing:2 },
+  
+  // Question
+  qBox:  { background:"rgba(255,255,255,0.025)", border:"1px solid rgba(255,255,255,0.06)", borderRadius:24, padding:"28px 22px", marginBottom:16 },
+  topic: { fontSize:9, color:"rgba(255,255,255,0.2)", textAlign:"center", marginBottom:14, letterSpacing:4, textTransform:"uppercase" },
+  qTxt:  { fontSize:"clamp(17px,4vw,22px)", lineHeight:1.65, margin:0, textAlign:"center", color:"#F0F0FF", fontWeight:500 },
+  
+  // Options
+  opG:   { display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 },
+  opB:   { border:"1px solid rgba(255,255,255,0.07)", borderRadius:18, padding:"16px 14px", fontSize:13, cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center", gap:10, transition:"all 0.2s", lineHeight:1.45, fontFamily:"inherit", fontWeight:500, background:"rgba(255,255,255,0.025)" },
+  opL:   { background:"rgba(255,255,255,0.06)", borderRadius:"50%", width:28, height:28, minWidth:28, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, flexShrink:0 },
+  expB:  { background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.06)", borderRadius:16, padding:"14px 18px", fontSize:13, lineHeight:1.7, color:"rgba(255,255,255,0.5)", marginBottom:16 },
+  nxtB:  { display:"block", width:"100%", background:`linear-gradient(135deg,#FFD700,#F5A623)`, color:"#06060F", border:"none", padding:"17px", borderRadius:28, fontWeight:800, cursor:"pointer", fontSize:15, fontFamily:"inherit", letterSpacing:0.3, boxShadow:"0 8px 32px rgba(255,215,0,0.2)" },
+  errBox:{ background:"rgba(255,60,60,0.06)", border:"1px solid rgba(255,60,60,0.15)", borderRadius:18, padding:"20px", textAlign:"center", marginTop:24 },
+  
+  // Level complete
+  lcCard:{ maxWidth:420, margin:"40px auto", background:"rgba(255,255,255,0.025)", border:"1px solid rgba(255,215,0,0.12)", borderRadius:28, padding:"40px 24px", textAlign:"center" },
+  lcEmo: { fontSize:56, marginBottom:16, display:"block" },
+  lcTit: { fontSize:24, color:gold, marginBottom:20, fontWeight:700, fontFamily:"'Playfair Display',serif" },
+  lcStat:{ display:"flex", justifyContent:"space-around", marginBottom:24 },
+  lcN:   { fontSize:32, color:gold, display:"block", fontWeight:800 },
+  lcL:   { fontSize:11, color:"rgba(255,255,255,0.25)", marginTop:4, letterSpacing:1 },
+  svNot: { background:"rgba(255,215,0,0.04)", border:"1px solid rgba(255,215,0,0.12)", borderRadius:16, padding:"14px 18px", fontSize:13, color:"rgba(255,215,0,0.6)", marginBottom:22 },
+  
+  // Buttons
+  primB: { display:"block", width:"100%", background:`linear-gradient(135deg,#FFD700,#F5A623)`, color:"#06060F", border:"none", padding:"16px", borderRadius:28, fontWeight:800, cursor:"pointer", fontSize:15, fontFamily:"inherit", marginBottom:10, boxShadow:"0 6px 24px rgba(255,215,0,0.2)", letterSpacing:0.3 },
+  ghstB: { display:"block", width:"100%", background:"none", border:"1px solid rgba(255,255,255,0.07)", color:"rgba(255,255,255,0.4)", padding:"14px", borderRadius:28, cursor:"pointer", fontSize:13, fontFamily:"inherit", transition:"all 0.2s" },
+  
+  // Leaderboard
+  lbW:   { margin:"0 14px", background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.05)", borderRadius:22, padding:"18px" },
+  lbTbs: { display:"flex", gap:8, marginBottom:16, background:"rgba(255,255,255,0.03)", borderRadius:14, padding:4 },
+  lbTb:  { flex:1, padding:"10px", borderRadius:10, border:"none", fontSize:12, cursor:"pointer", fontWeight:700, textAlign:"center", fontFamily:"inherit", transition:"all 0.2s" },
+  lbRw:  { display:"flex", alignItems:"center", gap:12, padding:"12px 14px", borderRadius:14, marginBottom:4 },
+  lbRk:  { width:28, textAlign:"center", fontWeight:800, fontSize:14 },
+  
+  // Register
+  regC:  { maxWidth:380, margin:"60px auto 0", background:"rgba(255,255,255,0.025)", border:"1px solid rgba(255,215,0,0.1)", borderRadius:28, padding:"40px 28px", textAlign:"center", position:"relative", zIndex:1 },
+  inp:   { width:"100%", background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:16, padding:"15px 18px", color:"#fff", fontSize:15, outline:"none", fontFamily:"inherit", marginBottom:12, transition:"border 0.2s", boxSizing:"border-box" },
+  footer:{ textAlign:"center", fontSize:11, color:"rgba(255,255,255,0.05)", padding:"30px 20px 0" },
+};
 
   // ─────────────────────────────────────────────────────────
   // BADGE EARNED POPUP
@@ -1237,10 +1300,12 @@ function LogosChallenge() {
 
   if (screen === "register") return (
     <div style={S.app}>
-      <style>{`*{box-sizing:border-box}`}</style>
-      <div style={S.glow}/>
+      <style>{``}</style>
+      <div style<div style={{position:"fixed",top:"-20%",left:"50%",transform:"translateX(-50%)",width:700,height:700,background:"radial-gradient(ellipse,rgba(255,215,0,0.04) 0%,transparent 60%)",pointerEvents:"none",zIndex:0,animation:"glowPulse 4s ease-in-out infinite"}}/>
+      <div style={{position:"fixed",bottom:"-10%",right:"-10%",width:500,height:500,background:"radial-gradient(ellipse,rgba(255,215,0,0.025) 0%,transparent 60%)",pointerEvents:"none",zIndex:0}}/>
+      <div style={{position:"fixed",top:"40%",left:"-5%",width:300,height:300,background:"radial-gradient(ellipse,rgba(100,80,255,0.04) 0%,transparent 60%)",pointerEvents:"none",zIndex:0}}/>>
       <div style={S.regC}>
-        <div style={{fontSize:44,marginBottom:10}}>✝️</div>
+        <div style={{fontSize:50,marginBottom:12,filter:"drop-shadow(0 0 20px rgba(245,200,66,0.3))"}}>✝️</div>
 
         {/* Step 1 — Google Sign-In only */}
         {!showLinkForm && (
@@ -1272,7 +1337,7 @@ function LogosChallenge() {
                 <input style={S.inp} placeholder={t.pseudoPlaceholder} value={pseudo}
                   onChange={e=>{setPseudo(e.target.value); setRecoverError("");}}
                   maxLength={20} onKeyDown={e=>e.key==="Enter"&&registerWithGoogle()}/>
-                <button style={S.primB} onClick={registerWithGoogle}>{t.startAdventure}</button>
+                <button className="btn-primary" style={S.primB} onClick={registerWithGoogle}>{t.startAdventure}</button>
                 <div style={{margin:"12px 0",display:"flex",alignItems:"center",gap:8,width:"100%"}}>
                   <div style={{flex:1,height:1,background:"rgba(255,255,255,0.08)"}}/>
                   <span style={{color:"#555",fontSize:11}}>─</span>
@@ -1291,7 +1356,7 @@ function LogosChallenge() {
                   onChange={e=>{setPseudo(e.target.value); setRecoverError("");}}
                   maxLength={20} onKeyDown={e=>e.key==="Enter"&&registerWithGoogle()}/>
                 {recoverError && <p style={{color:"#FF4444",fontSize:12,marginTop:-8,marginBottom:8}}>{recoverError}</p>}
-                <button style={S.primB} onClick={registerWithGoogle}>{t.recoverBtn}</button>
+                <button className="btn-primary" style={S.primB} onClick={registerWithGoogle}>{t.recoverBtn}</button>
                 <button style={S.ghstB} onClick={()=>{setRecoverMode(false); setPseudo(googleUser.name?.split(" ")[0]||""); setRecoverError("");}}>
                   ← {t.recoverSkip}
                 </button>
@@ -1339,7 +1404,7 @@ function LogosChallenge() {
 
     if (loadError) return (
       <div style={S.app}>
-        <style>{`*{box-sizing:border-box}`}</style>
+        <style>{``}</style>
         <div style={S.qWrap}>
           <div style={S.qHead}><button style={S.pausB} onClick={()=>setScreen("home")}>{t.back}</button></div>
           <div style={S.errBox}>
@@ -1357,7 +1422,7 @@ function LogosChallenge() {
 
     return (
       <div style={S.app}>
-        <style>{`*{box-sizing:border-box}`}</style>
+        <style>{``}</style>
         <div style={S.qWrap}>
           <div style={S.qHead}>
             <button style={S.pausB} onClick={()=>{ clearInterval(timerRef.current); setScreen("home"); }}>{t.pause}</button>
@@ -1387,7 +1452,7 @@ function LogosChallenge() {
                 else if (i===selected && selected!==q.a) { bg="rgba(255,107,107,0.18)"; border="1px solid #FF6B6B"; color="#FF6B6B"; }
               }
               return (
-                <button key={i} style={{...S.opB, background:bg, border, color}} onClick={()=>!answered&&commitAnswer(i)}>
+                <button key={i} className="opt-btn" className="opt-btn" style={{...S.opB, background:bg, border, color}} onClick={()=>!answered&&commitAnswer(i)}>
                   <span style={S.opL}>{["A","B","C","D"][i]}</span>{opt}
                 </button>
               );
@@ -1402,7 +1467,7 @@ function LogosChallenge() {
             </div>
           )}
           {answered && (
-            <button style={S.nxtB} onClick={goNext} disabled={saving}>
+            <button className="btn-primary" style={S.nxtB} onClick={goNext} disabled={saving}>
               {saving ? t.saving : answeredSoFar + qIndex + 1 >= totalQs
                 ? `${t.levelDone} ${activeLevel} ${t.levelDone2}`
                 : t.next}
@@ -1422,9 +1487,9 @@ function LogosChallenge() {
     const nextLvl = LEVELS[activeLevel];
     return (
       <div style={S.app}>
-        <style>{`*{box-sizing:border-box}`}</style>
+        <style>{``}</style>
         <div style={S.glow}/>
-        <div style={S.lcCard}>
+        <div style={S.lcCard} className="pop-in">
           <span style={S.lcEmo}>{lvl.emoji}</span>
           <h2 style={S.lcTit}>Niveau {activeLevel} — {lvl.name}<br/>{lang==="fr" ? "terminé" : "complete"} ! 🎉</h2>
           <div style={S.lcStat}>
@@ -1436,7 +1501,7 @@ function LogosChallenge() {
           {nextLvl ? (
             <>
               <p style={{fontSize:13,color:"#888",marginBottom:14}}>🔓 <strong style={{color:nextLvl.color}}>{nextLvl.name}</strong> {t.unlocked}</p>
-              <button style={S.primB} onClick={()=>{ setAskedTopics([]); startLevel(activeLevel+1); }}>
+              <button className="btn-primary" style={S.primB} onClick={()=>{ setAskedTopics([]); startLevel(activeLevel+1); }}>
                 Continuer → Niv.{activeLevel+1} {nextLvl.emoji}
               </button>
             </>
@@ -1458,7 +1523,7 @@ function LogosChallenge() {
     const correct = lp?.correctCount || 0;
     return (
       <div style={S.app}>
-        <style>{`*{box-sizing:border-box}`}</style>
+        <style>{``}</style>
         <div style={S.glow}/>
         <div style={S.lcCard}>
           <span style={{fontSize:52, marginBottom:12, display:"block"}}>😔</span>
@@ -1471,7 +1536,7 @@ function LogosChallenge() {
           <div style={{...S.svNot, borderColor:"rgba(255,107,107,0.3)", background:"rgba(255,107,107,0.07)", color:"#FFB3B3", marginBottom:18}}>
             {t.retryMsg1} {LEVELS[activeLevel-1].minToPass - correct} {LEVELS[activeLevel-1].minToPass - correct > 1 ? t.retryMsg3 : t.retryMsg2}. {t.retryMsg4}
           </div>
-          <button style={S.primB} onClick={()=>{ 
+          <button className="btn-primary" style={S.primB} onClick={()=>{ 
             setDailyProgress(prev => ({...prev, levelProgress: {...prev.levelProgress, [activeLevel]: {answeredCount:0, correctCount:0, score:0, done:false}}}));
             setAskedTopics([]);
             startLevel(activeLevel); 
@@ -1492,7 +1557,7 @@ function LogosChallenge() {
     const correct = lp?.correctCount || 0;
     return (
       <div style={S.app}>
-        <style>{`*{box-sizing:border-box}`}</style>
+        <style>{``}</style>
         <div style={S.glow}/>
         <div style={S.lcCard}>
           <span style={{fontSize:52, marginBottom:12, display:"block"}}>🔒</span>
@@ -1505,7 +1570,7 @@ function LogosChallenge() {
           <div style={{...S.svNot, borderColor:"rgba(255,215,0,0.2)", background:"rgba(255,215,0,0.04)", color:"#AAA", marginBottom:18}}>
             {t.blockedMsg}
           </div>
-          <button style={S.primB} onClick={()=>setScreen("home")}>{t.backHome}</button>
+          <button className="btn-primary" style={S.primB} onClick={()=>setScreen("home")}>{t.backHome}</button>
         </div>
       </div>
     );
@@ -1519,7 +1584,7 @@ function LogosChallenge() {
     const whatsappUrl = `https://wa.me/?text=${whatsappMsg}`;
     return (
       <div style={S.app}>
-        <style>{`*{box-sizing:border-box}`}</style>
+        <style>{``}</style>
         <div style={S.glow}/>
         <nav style={S.nav}>
           <button style={{background:"none",border:"none",color:gold,fontSize:16,cursor:"pointer",fontFamily:"inherit",padding:"8px 0"}} onClick={()=>setShowShare(false)}>{t.back}</button>
@@ -1578,7 +1643,7 @@ function LogosChallenge() {
   // ─────────────────────────────────────────────────────────
   if (showProfile) return (
     <div style={{...S.app, overflowY:"auto"}}>
-      <style>{`*{box-sizing:border-box}`}</style>
+      <style>{``}</style>
       <div style={S.glow}/>
       <div style={{maxWidth:440, margin:"0 auto", padding:"20px 16px 40px"}}>
 
@@ -1702,7 +1767,7 @@ function LogosChallenge() {
     const earnedIds = playerBadges;
     return (
       <div style={S.app}>
-        <style>{`*{box-sizing:border-box}`}</style>
+        <style>{``}</style>
         <div style={S.glow}/>
         <nav style={S.nav}>
           <button style={{background:"none",border:"none",color:gold,fontSize:16,cursor:"pointer",fontFamily:"inherit"}} onClick={()=>setShowBadges(false)}>{t.back}</button>
@@ -1744,7 +1809,7 @@ function LogosChallenge() {
     const correct = lp?.correctCount || 0;
     return (
       <div style={S.app}>
-        <style>{`*{box-sizing:border-box}`}</style>
+        <style>{``}</style>
         <div style={S.glow}/>
         <div style={S.lcCard}>
           <span style={{fontSize:52, marginBottom:12, display:"block"}}>😔</span>
@@ -1757,7 +1822,7 @@ function LogosChallenge() {
           <div style={{...S.svNot, borderColor:"rgba(255,107,107,0.3)", background:"rgba(255,107,107,0.07)", color:"#FFB3B3", marginBottom:18}}>
             {t.retryMsg1} {LEVELS[activeLevel-1].minToPass - correct} {LEVELS[activeLevel-1].minToPass - correct > 1 ? t.retryMsg3 : t.retryMsg2}. {t.retryMsg4}
           </div>
-          <button style={S.primB} onClick={()=>{ 
+          <button className="btn-primary" style={S.primB} onClick={()=>{ 
             setDailyProgress(prev => ({...prev, levelProgress: {...prev.levelProgress, [activeLevel]: {answeredCount:0, correctCount:0, score:0, done:false}}}));
             setAskedTopics([]);
             startLevel(activeLevel); 
@@ -1778,7 +1843,7 @@ function LogosChallenge() {
     const correct = lp?.correctCount || 0;
     return (
       <div style={S.app}>
-        <style>{`*{box-sizing:border-box}`}</style>
+        <style>{``}</style>
         <div style={S.glow}/>
         <div style={S.lcCard}>
           <span style={{fontSize:52, marginBottom:12, display:"block"}}>🔒</span>
@@ -1791,7 +1856,7 @@ function LogosChallenge() {
           <div style={{...S.svNot, borderColor:"rgba(255,215,0,0.2)", background:"rgba(255,215,0,0.04)", color:"#AAA", marginBottom:18}}>
             {t.blockedMsg}
           </div>
-          <button style={S.primB} onClick={()=>setScreen("home")}>{t.backHome}</button>
+          <button className="btn-primary" style={S.primB} onClick={()=>setScreen("home")}>{t.backHome}</button>
         </div>
       </div>
     );
@@ -1805,7 +1870,7 @@ function LogosChallenge() {
     const whatsappUrl = `https://wa.me/?text=${whatsappMsg}`;
     return (
       <div style={S.app}>
-        <style>{`*{box-sizing:border-box}`}</style>
+        <style>{``}</style>
         <div style={S.glow}/>
         <nav style={S.nav}>
           <button style={{background:"none",border:"none",color:gold,fontSize:16,cursor:"pointer",fontFamily:"inherit",padding:"8px 0"}} onClick={()=>setShowShare(false)}>{t.back}</button>
@@ -1866,7 +1931,7 @@ function LogosChallenge() {
     const earnedIds = playerBadges;
     return (
       <div style={S.app}>
-        <style>{`*{box-sizing:border-box}`}</style>
+        <style>{``}</style>
         <div style={S.glow}/>
         <nav style={S.nav}>
           <button style={{background:"none",border:"none",color:gold,fontSize:16,cursor:"pointer",fontFamily:"inherit",padding:"8px 0"}} onClick={()=>setShowBadges(false)}>{t.back}</button>
@@ -1906,11 +1971,11 @@ function LogosChallenge() {
 
   return (
     <div style={S.app}>
-      <style>{`*{box-sizing:border-box}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <style>{``}</style>
       <div style={S.glow}/>
       <nav style={S.nav}>
         <div style={S.navL}>
-          <span style={S.navT}>✝ LogosChallenge</span>
+          <span style={S.navT}>✝ LOGOS</span><span style={{...S.navT, color:"#fff", fontSize:16, fontFamily:"'Nunito',sans-serif", fontWeight:900, letterSpacing:-0.5}}>CHALLENGE</span>
           <span style={S.navS}>{t.tagline}</span>
         </div>
         <div style={{display:"flex", gap:8, alignItems:"center"}}>
@@ -1924,7 +1989,7 @@ function LogosChallenge() {
                   🔥 {playerStreak}j
                 </div>
               )}
-              <div style={S.chip} onClick={openProfile}>
+              <div className="nav-chip" style={S.chip} onClick={openProfile}>
                 <div style={S.chipN}>{player.pseudo} {playerBadges.length > 0 && <span style={{fontSize:10}}>🏅{playerBadges.length}</span>}</div>
                 <div style={S.chipS}>⭐ {dp.todayTotalScore} {t.ptsToday}</div>
               </div>
@@ -1940,7 +2005,7 @@ function LogosChallenge() {
 
       <div style={{display:"flex", justifyContent:"center", marginTop:16}}>
         <div style={{...S.aiBdg, fontSize:13, padding:"8px 18px"}}>
-          {t.aiTag}
+          <span style={{fontSize:11}}>✦</span> {t.aiTag}
         </div>
       </div>
 
@@ -1960,13 +2025,13 @@ function LogosChallenge() {
       
 
       <div style={S.secT}>{t.dailyChallenge}</div>
-      <div style={S.pathW}>
+      <div style={S.pathW} className="card-hover">
         <div style={S.pathH}>
           <span style={S.pathT}>🌅 {new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"})}</span>
           <span style={S.cdBdg}>⏰ {countdown}</span>
         </div>
         <div style={S.todS}>
-          <span style={S.todN}>{dp.todayTotalScore}</span>
+          <span style={{...S.todN, background:`linear-gradient(135deg,${gold2},${gold})`, WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent'}}>{dp.todayTotalScore}</span>
           <span style={S.todL}>{t.ptsToday2}</span>
         </div>
 
@@ -1991,7 +2056,7 @@ function LogosChallenge() {
           else if (isUnlocked){ borderColor=lvl.color+"33"; statusColor=lvl.color; statusText=t.available; cursor="pointer"; }
 
           return (
-            <div key={lvl.id} style={{...S.lvlSt, background:bgColor, borderColor, opacity:isUnlocked?1:0.3, cursor}}
+            <div key={lvl.id} className="level-card" style={{...S.lvlSt, background:bgColor, borderColor, opacity:isUnlocked?1:0.3, cursor}}
               onClick={()=>{ if(!isUnlocked||isDone||isBlocked) return; if(!player){setScreen("register");return;} startLevel(lvl.id); }}>
               <span style={S.stIco}>{lvl.emoji}</span>
               <div style={S.stInf}>
