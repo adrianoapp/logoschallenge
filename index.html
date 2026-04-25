@@ -483,36 +483,39 @@ async function supaFetch(path, method = "GET", body = null) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// AUTH PAR EMAIL OTP (code 6 chiffres — aucun navigateur externe)
+// AUTH PAR EMAIL OTP — utilise Supabase Auth natif (pas d'Edge Function)
 // ─────────────────────────────────────────────────────────────
 
-// Génère un code OTP à 6 chiffres, le stocke en base avec expiration 10 min
+// Envoie un OTP via Supabase Auth (email natif, pas de navigateur externe)
 async function sendOTPCode(email) {
-  const code = String(Math.floor(100000 + Math.random() * 900000));
-  const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-  // Upsert le code dans la table otp_codes
-  await supaFetch("otp_codes?email=eq." + encodeURIComponent(email), "DELETE");
-  await supaFetch("otp_codes", "POST", { email, code, expires_at: expires });
-  // Envoyer via Supabase Edge Function (ou fallback: afficher le code en dev)
-  try {
-    await fetch(`${SUPA_URL}/functions/v1/send-otp`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPA_KEY}` },
-      body: JSON.stringify({ email, code })
-    });
-  } catch(e) { console.log("OTP (dev):", code); }
-  return code;
+  const res = await fetch(`${SUPA_URL}/auth/v1/otp`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "apikey": SUPA_KEY,
+    },
+    body: JSON.stringify({ email, create_user: true }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.msg || err.error_description || "Erreur envoi OTP");
+  }
+  return true;
 }
 
+// Vérifie le code OTP via Supabase Auth
 async function verifyOTPCode(email, inputCode) {
-  const rows = await supaFetch(`otp_codes?email=eq.${encodeURIComponent(email)}&select=*`);
-  if (!rows || rows.length === 0) return false;
-  const row = rows[0];
-  if (row.code !== inputCode.trim()) return false;
-  if (new Date(row.expires_at) < new Date()) return false;
-  // Supprimer le code après usage
-  await supaFetch(`otp_codes?email=eq.${encodeURIComponent(email)}`, "DELETE");
-  return true;
+  const res = await fetch(`${SUPA_URL}/auth/v1/verify`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "apikey": SUPA_KEY,
+    },
+    body: JSON.stringify({ type: "email", email, token: inputCode.trim() }),
+  });
+  if (!res.ok) return false;
+  const data = await res.json();
+  return !!data.access_token;
 }
 
 async function dbGetOrCreatePlayer(pseudo, referredBy = null) {
@@ -759,23 +762,27 @@ function LogosChallenge() {
       const valid = await verifyOTPCode(emailTrimmed, otpCode);
       if (!valid) { setOtpError(t.codeError); setOtpLoading(false); return; }
 
-      // RÈGLE : 1 email = 1 pseudo pour toujours
+      // RÈGLE ABSOLUE : 1 email = 1 pseudo pour toujours
       const byEmail = await supaFetch(`players?email=eq.${encodeURIComponent(emailTrimmed)}&select=*`);
       if (byEmail && byEmail.length > 0) {
-        // Email déjà connu → connexion directe, pas de questions
+        // Email déjà connu → connexion directe, même appareil, même compte
         await loadPlayerSession(byEmail[0]);
         setOtpSent(false); setOtpCode(""); setOtpEmail("");
         setOtpLoading(false);
         return;
       }
 
-      // Nouvel email — afficher le formulaire pseudo
+      // Nouvel email — choisir un pseudo
       setGoogleUser({ email: emailTrimmed, name: "", googleId: null });
+      setOtpSent(false); setOtpCode("");
       setShowLinkForm(true);
       setRecoverMode(false);
       setRecoverError("");
-      setScreen("register");
-    } catch(e) { setOtpError(lang==="fr"?"Erreur. Réessayez.":"Error. Try again."); }
+      // Reste sur l'écran register, showLinkForm=true affiche le formulaire pseudo
+    } catch(e) {
+      console.error(e);
+      setOtpError(lang==="fr"?"Code incorrect ou expiré.":"Wrong or expired code.");
+    }
     setOtpLoading(false);
   }
 
