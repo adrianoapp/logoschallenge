@@ -18,6 +18,13 @@
   <link rel="apple-touch-icon" href="/icon-192.png"/>
   <meta name="mobile-web-app-capable" content="yes"/>
 
+  <!-- Capacitor (détecte si l'app tourne dans Android/iOS) -->
+  <script>
+    // Polyfill Capacitor pour le web (évite les erreurs si pas dans l'app)
+    if (typeof window !== 'undefined' && !window.Capacitor) {
+      window.Capacitor = { isNative: false, isPluginAvailable: () => false, Plugins: {} };
+    }
+  </script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -478,7 +485,25 @@ async function supabaseAuth(action, params) {
   if (action === "signInWithOAuth") {
     const redirectTo = encodeURIComponent(params.options.redirectTo);
     const url = `${SUPA_URL}/auth/v1/authorize?provider=${params.provider}&redirect_to=${redirectTo}`;
-    window.location.href = url;
+
+    // ── Capacitor In-App Browser ──────────────────────────────
+    // Si on est dans l'app Android/iOS, on ouvre un navigateur intégré
+    // qui reviendra automatiquement dans l'app après la connexion Google.
+    const isCapacitor = window.Capacitor && window.Capacitor.isNative;
+    if (isCapacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Browser) {
+      try {
+        await window.Capacitor.Plugins.Browser.open({
+          url: url,
+          presentationStyle: 'popover',
+          toolbarColor: '#0D1B2A'
+        });
+      } catch(e) {
+        // Fallback si le plugin échoue
+        window.location.href = url;
+      }
+    } else {
+      window.location.href = url;
+    }
     return { data: null, error: null };
   }
   if (action === "getSession") {
@@ -689,7 +714,43 @@ function LogosChallenge() {
   // Auto-login on app start
   useEffect(() => {
     checkForAuthToken();
-    
+
+    // ── Capacitor: écoute le retour OAuth depuis le navigateur intégré ──
+    // Quand Google redirige vers logoschallenge.vercel.app?#access_token=...
+    // le plugin Browser ferme et l'app reçoit l'URL via appUrlOpen
+    const isCapacitor = window.Capacitor && window.Capacitor.isNative;
+    let appUrlListener = null;
+    let browserListener = null;
+
+    if (isCapacitor && window.Capacitor.Plugins) {
+      // Écoute l'URL de retour deep link
+      if (window.Capacitor.Plugins.App) {
+        window.Capacitor.Plugins.App.addListener('appUrlOpen', (data) => {
+          const url = data.url || "";
+          if (url.includes("access_token")) {
+            const hashPart = url.includes("#") ? url.split("#")[1] : url.split("?")[1] || "";
+            const params = new URLSearchParams(hashPart);
+            const token = params.get("access_token");
+            if (token) {
+              try { sessionStorage.setItem("lc_pending_token", token); } catch(e) {}
+              setAuthLoading(true);
+              if (window.Capacitor.Plugins.Browser) {
+                window.Capacitor.Plugins.Browser.close().catch(() => {});
+              }
+              handleGoogleCallback(token);
+            }
+          }
+        }).then(l => { appUrlListener = l; }).catch(() => {});
+      }
+      // Écoute la fermeture du navigateur intégré
+      if (window.Capacitor.Plugins.Browser) {
+        window.Capacitor.Plugins.Browser.addListener('browserFinished', () => {
+          // Le navigateur s'est fermé — vérifie si on a un token en attente
+          checkForAuthToken();
+        }).then(l => { browserListener = l; }).catch(() => {});
+      }
+    }
+
     // Listen for when user comes back from browser (mobile OAuth)
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
@@ -703,6 +764,8 @@ function LogosChallenge() {
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("focus", handleFocus);
+      if (appUrlListener) appUrlListener.remove().catch(() => {});
+      if (browserListener) browserListener.remove().catch(() => {});
     };
   }, []);
 
