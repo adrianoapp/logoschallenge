@@ -676,6 +676,7 @@ function LogosChallenge() {
   const [lang, setLang]             = useState(() => localStorage.getItem("lc_lang") || "fr");
   const [googleUser, setGoogleUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(false);
+  const [authTimeout, setAuthTimeout] = useState(false);
   const [showLinkForm, setShowLinkForm] = useState(false);
   const [recoverMode, setRecoverMode]   = useState(false); // true = recovering old account
   const [recoverError, setRecoverError] = useState("");
@@ -689,41 +690,75 @@ function LogosChallenge() {
   
   // Auto-login on app start
   useEffect(() => {
+    checkForAuthToken();
+    
+    // Listen for when user comes back from browser (mobile OAuth)
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        checkForAuthToken();
+      }
+    };
+    const handleFocus = () => checkForAuthToken();
+    
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, []);
+
+  function checkForAuthToken() {
+    // Check URL hash for token (from OAuth redirect)
     const hash = window.location.hash;
     if (hash && hash.includes("access_token")) {
-      // Coming back from Google OAuth
       const params = new URLSearchParams(hash.replace("#", "?"));
       const accessToken = params.get("access_token");
       if (accessToken) {
+        // Save token immediately to survive page reloads
+        try { sessionStorage.setItem("lc_pending_token", accessToken); } catch(e) {}
         setAuthLoading(true);
         window.history.replaceState({}, document.title, "/");
         handleGoogleCallback(accessToken);
         return;
       }
     }
-    // Try auto-login from localStorage
+    
+    // Check sessionStorage for pending token (from mobile browser return)
+    const pendingToken = sessionStorage.getItem("lc_pending_token");
+    if (pendingToken) {
+      try { sessionStorage.removeItem("lc_pending_token"); } catch(e) {}
+      setAuthLoading(true);
+      handleGoogleCallback(pendingToken);
+      return;
+    }
+    
+    // Auto-login from localStorage
     const savedId = localStorage.getItem("lc_player_id");
     const savedPseudo = localStorage.getItem("lc_pseudo");
     if (savedId && savedPseudo) {
       setAuthLoading(true);
       autoLogin(savedId, savedPseudo);
     }
-  }, []);
+  }
 
   async function autoLogin(playerId, pseudo) {
+    // Set timeout — if loading takes > 8s on mobile, show retry button
+    const timer = setTimeout(() => setAuthTimeout(true), 8000);
     try {
       const p = await supaFetch(`players?id=eq.${playerId}&select=*`);
       if (p && p.length > 0) {
         await loadPlayerSession(p[0]);
       } else {
-        // Player not found - clear storage
         localStorage.removeItem("lc_player_id");
         localStorage.removeItem("lc_pseudo");
       }
     } catch(e) {
       console.error("Auto-login error:", e);
     }
+    clearTimeout(timer);
     setAuthLoading(false);
+    setAuthTimeout(false);
   }
 
   async function handleGoogleCallback(accessToken) {
@@ -767,6 +802,7 @@ function LogosChallenge() {
       setScreen("register");
     } catch(e) {
       console.error("Google auth error:", e);
+      setAuthTimeout(true);
     }
     setAuthLoading(false);
   }
@@ -1293,12 +1329,31 @@ const accent  = "#7C6FE0";  // soft indigo accent
   // REGISTER
   // ─────────────────────────────────────────────────────────
   if (authLoading) return (
-    <div style={{...S.app, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:20}}>
-      <div style={{fontSize:48}}>✝️</div>
-      <div style={{color:gold, fontSize:16, fontWeight:700}}>{t.signingIn}</div>
-      <div style={{display:"flex", gap:8}}>
+    <div style={{...S.app, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:20, padding:24}}>
+      <div style={{fontSize:56, animation:"floatY 2s ease-in-out infinite"}}>✝️</div>
+      <div style={{color:"#fff", fontSize:18, fontWeight:700, fontFamily:"'Sora',sans-serif"}}>{t.signingIn}</div>
+      <div style={{display:"flex", gap:10}}>
         {[0,1,2].map(i => <div key={i} style={{width:10,height:10,borderRadius:"50%",background:"#63CAB7",animation:`pulse 1.2s ${i*0.4}s infinite`}}/>)}
       </div>
+      {authTimeout && (
+        <div style={{marginTop:20, textAlign:"center"}}>
+          <p style={{color:"rgba(255,255,255,0.4)", fontSize:13, marginBottom:16, lineHeight:1.6}}>
+            {lang==="fr" 
+              ? "Si vous revenez de Google,
+touchez le bouton ci-dessous." 
+              : "If you're back from Google,
+tap the button below."}
+          </p>
+          <button onClick={()=>{setAuthLoading(false);setAuthTimeout(false);checkForAuthToken();}}
+            style={{background:"linear-gradient(135deg,#63CAB7,#4FACFE)",border:"none",borderRadius:20,padding:"12px 28px",color:"#fff",fontWeight:700,cursor:"pointer",fontFamily:"inherit",fontSize:14,marginBottom:10,display:"block",width:"100%"}}>
+            {lang==="fr"?"🔄 Vérifier ma connexion":"🔄 Check my connection"}
+          </button>
+          <button onClick={()=>{setAuthLoading(false);setAuthTimeout(false);}}
+            style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:20,padding:"11px 28px",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontFamily:"inherit",fontSize:13,display:"block",width:"100%"}}>
+            {lang==="fr"?"← Retour à l'accueil":"← Back to home"}
+          </button>
+        </div>
+      )}
     </div>
   );
 
