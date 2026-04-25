@@ -890,6 +890,31 @@ function LogosChallenge() {
     const pseudoTrimmed = pseudo.trim();
     setRecoverError("");
     try {
+      // ── RÈGLE ABSOLUE : 1 email Google = 1 pseudo pour toujours ──
+      // Avant toute action, on vérifie si ce compte Google est déjà lié
+      // à un pseudo existant (même après récupération, même après changement d'appareil)
+      const alreadyByGoogleId = await supaFetch(`players?google_id=eq.${googleUser.googleId}&select=id,pseudo`);
+      if (alreadyByGoogleId && alreadyByGoogleId.length > 0) {
+        const linkedPseudo = alreadyByGoogleId[0].pseudo;
+        // Si le pseudo lié est différent de ce qu'il tape → on le connecte directement au bon compte
+        await loadPlayerSession(alreadyByGoogleId[0]);
+        setShowLinkForm(false);
+        setRecoverMode(false);
+        return;
+      }
+      // Vérifier aussi par email
+      const alreadyByEmail = await supaFetch(`players?email=eq.${encodeURIComponent(googleUser.email)}&select=id,pseudo,google_id`);
+      if (alreadyByEmail && alreadyByEmail.length > 0) {
+        // Lier le google_id si pas encore fait et connecter
+        if (!alreadyByEmail[0].google_id) {
+          await supaFetch(`players?id=eq.${alreadyByEmail[0].id}`, "PATCH", { google_id: googleUser.googleId });
+        }
+        await loadPlayerSession(alreadyByEmail[0]);
+        setShowLinkForm(false);
+        setRecoverMode(false);
+        return;
+      }
+
       if (recoverMode) {
         // RECOVER: find player by pseudo
         let existing = await supaFetch(`players?pseudo=eq.${pseudoTrimmed}&select=id,pseudo,referred_by,google_id,email`);
@@ -901,12 +926,12 @@ function LogosChallenge() {
           return;
         }
         const p = existing[0];
-        // SECURITY: if pseudo already linked to a DIFFERENT gmail → refuse
+        // SÉCURITÉ : si ce pseudo est déjà lié à un AUTRE compte Google → refuser
         if (p.google_id && p.google_id !== googleUser.googleId) {
           setRecoverError(t.pseudoAlreadyLinked);
           return;
         }
-        // Link permanently — DB unique constraint blocks any duplicate
+        // Lier définitivement ce compte Google à ce pseudo
         const res = await supaFetch(`players?id=eq.${p.id}`, "PATCH", {
           google_id: googleUser.googleId,
           email: googleUser.email
@@ -921,7 +946,7 @@ function LogosChallenge() {
         setRecoverMode(false);
         await loadPlayerSession(p);
       } else {
-        // NEW PLAYER: check pseudo not taken
+        // NOUVEAU JOUEUR: vérifier que le pseudo n'est pas déjà pris
         const taken = await supaFetch(`players?pseudo=eq.${pseudoTrimmed}&select=id,google_id`);
         if (taken && taken.length > 0 && taken[0].google_id && taken[0].google_id !== googleUser.googleId) {
           setRecoverError(lang === "fr"
@@ -931,7 +956,7 @@ function LogosChallenge() {
         }
         const p = await dbGetOrCreatePlayer(pseudoTrimmed, urlRef);
         if (!p) throw new Error("Erreur création joueur");
-        // Link google_id permanently — DB blocks if already used
+        // Lier google_id + email de façon permanente et unique
         const res2 = await supaFetch(`players?id=eq.${p.id}`, "PATCH", {
           google_id: googleUser.googleId,
           email: googleUser.email
@@ -1424,10 +1449,8 @@ const accent  = "#7C6FE0";  // soft indigo accent
         <div style={{marginTop:20, textAlign:"center"}}>
           <p style={{color:"rgba(255,255,255,0.4)", fontSize:13, marginBottom:16, lineHeight:1.6}}>
             {lang==="fr" 
-              ? "Si vous revenez de Google,
-touchez le bouton ci-dessous." 
-              : "If you're back from Google,
-tap the button below."}
+              ? "Si vous revenez de Google, touchez le bouton ci-dessous."
+              : "If you\'re back from Google, tap the button below."}
           </p>
           <button onClick={()=>{setAuthLoading(false);setAuthTimeout(false);checkForAuthToken();}}
             style={{background:"linear-gradient(135deg,#63CAB7,#4FACFE)",border:"none",borderRadius:20,padding:"12px 28px",color:"#fff",fontWeight:700,cursor:"pointer",fontFamily:"inherit",fontSize:14,marginBottom:10,display:"block",width:"100%"}}>
