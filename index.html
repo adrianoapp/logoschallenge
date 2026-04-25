@@ -450,15 +450,13 @@ async function supaFetch(path, method = "GET", body = null) {
       "Content-Type": "application/json",
       "apikey": SUPA_KEY,
       "Authorization": `Bearer ${SUPA_KEY}`,
-      "Prefer": method === "POST" ? "return=representation" : "return=minimal",
+      "Prefer": method === "POST" ? "return=representation" : "return=representation",
     },
   };
   if (body) opts.body = JSON.stringify(body);
   const r = await fetch(`${SUPA_URL}/rest/v1/${path}`, opts);
-  if (method === "GET" || opts.headers["Prefer"] === "return=representation") {
-    return r.json();
-  }
-  return r.ok;
+  // Always return JSON so we can detect errors (e.g. unique constraint violation code 23505)
+  try { return await r.json(); } catch(e) { return r.ok; }
 }
 
 // Get or create player by pseudo
@@ -830,34 +828,58 @@ function LogosChallenge() {
     setRecoverError("");
     try {
       if (recoverMode) {
-        // Try to find existing player by pseudo
-        // Try exact match first, then case-insensitive
+        // RECOVER: find player by pseudo
         let existing = await supaFetch(`players?pseudo=eq.${pseudoTrimmed}&select=id,pseudo,referred_by,google_id,email`);
         if (!existing || existing.length === 0) {
           existing = await supaFetch(`players?pseudo=ilike.${pseudoTrimmed}&select=id,pseudo,referred_by,google_id,email`);
         }
-        console.log("Recover search result:", existing, "for pseudo:", pseudoTrimmed);
         if (!existing || existing.length === 0) {
           setRecoverError(t.recoverNotFound);
           return;
         }
         const p = existing[0];
-        // Link google_id to existing player
-        await supaFetch(`players?id=eq.${p.id}`, "PATCH", {
+        // SECURITY: if pseudo already linked to a DIFFERENT gmail → refuse
+        if (p.google_id && p.google_id !== googleUser.googleId) {
+          setRecoverError(t.pseudoAlreadyLinked);
+          return;
+        }
+        // Link permanently — DB unique constraint blocks any duplicate
+        const res = await supaFetch(`players?id=eq.${p.id}`, "PATCH", {
           google_id: googleUser.googleId,
           email: googleUser.email
         });
+        if (res && res.code === "23505") {
+          setRecoverError(lang === "fr"
+            ? "Ce compte Google est déjà lié à un autre pseudo."
+            : "This Google account is already linked to another username.");
+          return;
+        }
         setShowLinkForm(false);
         setRecoverMode(false);
         await loadPlayerSession(p);
       } else {
-        // New player - create account
+        // NEW PLAYER: check pseudo not taken
+        const taken = await supaFetch(`players?pseudo=eq.${pseudoTrimmed}&select=id,google_id`);
+        if (taken && taken.length > 0 && taken[0].google_id && taken[0].google_id !== googleUser.googleId) {
+          setRecoverError(lang === "fr"
+            ? "Ce pseudo est déjà pris. Choisissez-en un autre."
+            : "This username is taken. Choose another.");
+          return;
+        }
         const p = await dbGetOrCreatePlayer(pseudoTrimmed, urlRef);
         if (!p) throw new Error("Erreur création joueur");
-        await supaFetch(`players?id=eq.${p.id}`, "PATCH", {
+        // Link google_id permanently — DB blocks if already used
+        const res2 = await supaFetch(`players?id=eq.${p.id}`, "PATCH", {
           google_id: googleUser.googleId,
           email: googleUser.email
         });
+        if (res2 && res2.code === "23505") {
+          await supaFetch(`players?id=eq.${p.id}`, "DELETE");
+          setRecoverError(lang === "fr"
+            ? "Ce compte Google est déjà utilisé. Cliquez 'Récupérer mes points'."
+            : "This Google account is already used. Click 'Recover my points'.");
+          return;
+        }
         setShowLinkForm(false);
         await loadPlayerSession(p);
       }
