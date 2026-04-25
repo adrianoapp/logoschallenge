@@ -167,18 +167,26 @@ const T = {
     linkExisting: "J'ai déjà un compte — lier mes points",
     signingIn: "Connexion en cours...",
     recoverTitle: "Récupérer mes points",
-    recoverDesc: "Vous avez déjà joué ? Entrez votre ancien pseudo pour lier vos points à ce compte Google.",
+    recoverDesc: "Vous avez déjà joué ? Entrez votre pseudo et email pour récupérer vos points.",
     recoverPseudo: "Votre ancien pseudo...",
     recoverBtn: "Récupérer mes points →",
     recoverSkip: "Je suis nouveau — créer mon pseudo",
-    recoverNotFound: "Pseudo introuvable. Vérifiez l'orthographe.",
+    recoverNotFound: "Pseudo ou email introuvable. Vérifiez l'orthographe.",
     recoverSuccess: "Points récupérés ! ✅",
-    emailAlreadyLinked: "Ce compte Google est déjà lié au pseudo",
-    pseudoAlreadyLinked: "Ce pseudo est déjà lié à un autre compte Google. Connectez-vous avec ce compte.",
+    emailAlreadyLinked: "Cet email est déjà lié au pseudo",
+    pseudoAlreadyLinked: "Ce pseudo est déjà lié à un autre email.",
     welcomeBackGoogle: "Bon retour",
-    accountSecured: "Compte sécurisé par Google ✅",
+    accountSecured: "Compte sécurisé ✅",
     registerDesc: "Créez votre profil pour sauvegarder votre progression et figurer dans le classement mondial",
     pseudoPlaceholder: "Votre pseudo...",
+    emailPlaceholder: "Votre email...",
+    sendCode: "Envoyer le code →",
+    enterCode: "Entrez le code reçu par email",
+    codePlaceholder: "Code à 6 chiffres...",
+    verifyCode: "Vérifier →",
+    codeSent: "Code envoyé à ",
+    codeError: "Code incorrect ou expiré. Réessayez.",
+    emailError: "Email invalide.",
     startAdventure: "Commencer l'aventure →",
     back: "Retour",
     // Quiz
@@ -313,18 +321,26 @@ const T = {
     linkExisting: "I have an account — link my points",
     signingIn: "Signing in...",
     recoverTitle: "Recover my points",
-    recoverDesc: "Already played? Enter your old username to link your points to this Google account.",
+    recoverDesc: "Already played? Enter your username and email to recover your points.",
     recoverPseudo: "Your old username...",
     recoverBtn: "Recover my points →",
     recoverSkip: "I'm new — create my username",
-    recoverNotFound: "Username not found. Check the spelling.",
+    recoverNotFound: "Username or email not found.",
     recoverSuccess: "Points recovered! ✅",
-    emailAlreadyLinked: "This Google account is already linked to username",
-    pseudoAlreadyLinked: "This username is already linked to another Google account. Sign in with that account.",
+    emailAlreadyLinked: "This email is already linked to username",
+    pseudoAlreadyLinked: "This username is already linked to another email.",
     welcomeBackGoogle: "Welcome back",
-    accountSecured: "Account secured by Google ✅",
+    accountSecured: "Account secured ✅",
     registerDesc: "Create your profile to save your progress and appear on the global leaderboard",
     pseudoPlaceholder: "Your username...",
+    emailPlaceholder: "Your email...",
+    sendCode: "Send code →",
+    enterCode: "Enter the code sent to your email",
+    codePlaceholder: "6-digit code...",
+    verifyCode: "Verify →",
+    codeSent: "Code sent to ",
+    codeError: "Wrong or expired code. Try again.",
+    emailError: "Invalid email.",
     startAdventure: "Start the adventure →",
     back: "Back",
     quit: "✕ Quit",
@@ -466,62 +482,37 @@ async function supaFetch(path, method = "GET", body = null) {
   try { return await r.json(); } catch(e) { return r.ok; }
 }
 
-// Get or create player by pseudo
 // ─────────────────────────────────────────────────────────────
-// GOOGLE AUTH
+// AUTH PAR EMAIL OTP (code 6 chiffres — aucun navigateur externe)
 // ─────────────────────────────────────────────────────────────
-async function signInWithGoogle() {
-  // Toujours rediriger vers Vercel (même depuis l'app Android)
-  const redirectTo = "https://logoschallenge.vercel.app";
-  const { data, error } = await supabaseAuth("signInWithOAuth", {
-    provider: "google",
-    options: {
-      redirectTo: redirectTo,
-      queryParams: { access_type: "offline", prompt: "consent" },
-    },
-  });
-  return { data, error };
-}
 
-async function supabaseAuth(action, params) {
-  if (action === "signInWithOAuth") {
-    const redirectTo = encodeURIComponent(params.options.redirectTo);
-    const url = `${SUPA_URL}/auth/v1/authorize?provider=${params.provider}&redirect_to=${redirectTo}`;
-
-    // ── Capacitor In-App Browser ──────────────────────────────
-    // Si on est dans l'app Android/iOS, on ouvre un navigateur intégré
-    // qui reviendra automatiquement dans l'app après la connexion Google.
-    const isCapacitor = window.Capacitor && window.Capacitor.isNative;
-    if (isCapacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Browser) {
-      try {
-        await window.Capacitor.Plugins.Browser.open({
-          url: url,
-          presentationStyle: 'popover',
-          toolbarColor: '#0D1B2A'
-        });
-      } catch(e) {
-        // Fallback si le plugin échoue
-        window.location.href = url;
-      }
-    } else {
-      window.location.href = url;
-    }
-    return { data: null, error: null };
-  }
-  if (action === "getSession") {
-    const res = await fetch(`${SUPA_URL}/auth/v1/user`, {
-      headers: { "apikey": SUPA_KEY, "Authorization": `Bearer ${params.accessToken}` }
+// Génère un code OTP à 6 chiffres, le stocke en base avec expiration 10 min
+async function sendOTPCode(email) {
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  // Upsert le code dans la table otp_codes
+  await supaFetch("otp_codes?email=eq." + encodeURIComponent(email), "DELETE");
+  await supaFetch("otp_codes", "POST", { email, code, expires_at: expires });
+  // Envoyer via Supabase Edge Function (ou fallback: afficher le code en dev)
+  try {
+    await fetch(`${SUPA_URL}/functions/v1/send-otp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPA_KEY}` },
+      body: JSON.stringify({ email, code })
     });
-    return res.ok ? { data: await res.json(), error: null } : { data: null, error: "No session" };
-  }
+  } catch(e) { console.log("OTP (dev):", code); }
+  return code;
 }
 
-async function getGoogleUser(accessToken) {
-  const res = await fetch(`${SUPA_URL}/auth/v1/user`, {
-    headers: { "apikey": SUPA_KEY, "Authorization": `Bearer ${accessToken}` }
-  });
-  if (!res.ok) return null;
-  return await res.json();
+async function verifyOTPCode(email, inputCode) {
+  const rows = await supaFetch(`otp_codes?email=eq.${encodeURIComponent(email)}&select=*`);
+  if (!rows || rows.length === 0) return false;
+  const row = rows[0];
+  if (row.code !== inputCode.trim()) return false;
+  if (new Date(row.expires_at) < new Date()) return false;
+  // Supprimer le code après usage
+  await supaFetch(`otp_codes?email=eq.${encodeURIComponent(email)}`, "DELETE");
+  return true;
 }
 
 async function dbGetOrCreatePlayer(pseudo, referredBy = null) {
@@ -676,10 +667,10 @@ function timeUntilMidnight() {
   return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 
-function freshDailyProgress(currentLevel = 1) {
+function freshDailyProgress() {
   const lp = {};
-  LEVELS.forEach(l => { lp[l.id] = { answeredCount: 0, correctCount: 0, score: 0, done: false }; });
-  return { currentLevel: currentLevel, levelProgress: lp, todayTotalScore: 0, totalPoints: 0 };
+  LEVELS.forEach(l => { lp[l.id] = { answeredCount: 0, score: 0, done: false }; });
+  return { currentLevel: 1, levelProgress: lp, todayTotalScore: 0, totalPoints: 0 };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -703,8 +694,14 @@ function LogosChallenge() {
   const [authLoading, setAuthLoading] = useState(false);
   const [authTimeout, setAuthTimeout] = useState(false);
   const [showLinkForm, setShowLinkForm] = useState(false);
-  const [recoverMode, setRecoverMode]   = useState(false); // true = recovering old account
+  const [recoverMode, setRecoverMode]   = useState(false);
   const [recoverError, setRecoverError] = useState("");
+  // Email OTP states
+  const [otpEmail, setOtpEmail]         = useState("");
+  const [otpCode, setOtpCode]           = useState("");
+  const [otpSent, setOtpSent]           = useState(false);
+  const [otpLoading, setOtpLoading]     = useState(false);
+  const [otpError, setOtpError]         = useState("");
   const [showProfile, setShowProfile]   = useState(false);
   const [editingPseudo, setEditingPseudo] = useState(false);
   const [newPseudo, setNewPseudo]       = useState("");
@@ -715,95 +712,13 @@ function LogosChallenge() {
   
   // Auto-login on app start
   useEffect(() => {
-    checkForAuthToken();
-
-    // ── Capacitor: écoute le retour OAuth depuis le navigateur intégré ──
-    // Quand Google redirige vers logoschallenge.vercel.app?#access_token=...
-    // le plugin Browser ferme et l'app reçoit l'URL via appUrlOpen
-    const isCapacitor = window.Capacitor && window.Capacitor.isNative;
-    let appUrlListener = null;
-    let browserListener = null;
-
-    if (isCapacitor && window.Capacitor.Plugins) {
-      // Écoute l'URL de retour deep link
-      if (window.Capacitor.Plugins.App) {
-        window.Capacitor.Plugins.App.addListener('appUrlOpen', (data) => {
-          const url = data.url || "";
-          if (url.includes("access_token")) {
-            const hashPart = url.includes("#") ? url.split("#")[1] : url.split("?")[1] || "";
-            const params = new URLSearchParams(hashPart);
-            const token = params.get("access_token");
-            if (token) {
-              try { sessionStorage.setItem("lc_pending_token", token); } catch(e) {}
-              setAuthLoading(true);
-              if (window.Capacitor.Plugins.Browser) {
-                window.Capacitor.Plugins.Browser.close().catch(() => {});
-              }
-              handleGoogleCallback(token);
-            }
-          }
-        }).then(l => { appUrlListener = l; }).catch(() => {});
-      }
-      // Écoute la fermeture du navigateur intégré
-      if (window.Capacitor.Plugins.Browser) {
-        window.Capacitor.Plugins.Browser.addListener('browserFinished', () => {
-          // Le navigateur s'est fermé — vérifie si on a un token en attente
-          checkForAuthToken();
-        }).then(l => { browserListener = l; }).catch(() => {});
-      }
-    }
-
-    // Listen for when user comes back from browser (mobile OAuth)
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        checkForAuthToken();
-      }
-    };
-    const handleFocus = () => checkForAuthToken();
-    
-    document.addEventListener("visibilitychange", handleVisibility);
-    window.addEventListener("focus", handleFocus);
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibility);
-      window.removeEventListener("focus", handleFocus);
-      if (appUrlListener) appUrlListener.remove().catch(() => {});
-      if (browserListener) browserListener.remove().catch(() => {});
-    };
-  }, []);
-
-  function checkForAuthToken() {
-    // Check URL hash for token (from OAuth redirect)
-    const hash = window.location.hash;
-    if (hash && hash.includes("access_token")) {
-      const params = new URLSearchParams(hash.replace("#", "?"));
-      const accessToken = params.get("access_token");
-      if (accessToken) {
-        // Save token immediately to survive page reloads
-        try { sessionStorage.setItem("lc_pending_token", accessToken); } catch(e) {}
-        setAuthLoading(true);
-        window.history.replaceState({}, document.title, "/");
-        handleGoogleCallback(accessToken);
-        return;
-      }
-    }
-    
-    // Check sessionStorage for pending token (from mobile browser return)
-    const pendingToken = sessionStorage.getItem("lc_pending_token");
-    if (pendingToken) {
-      try { sessionStorage.removeItem("lc_pending_token"); } catch(e) {}
-      setAuthLoading(true);
-      handleGoogleCallback(pendingToken);
-      return;
-    }
-    
-    // Auto-login from localStorage
     const savedId = localStorage.getItem("lc_player_id");
     const savedPseudo = localStorage.getItem("lc_pseudo");
     if (savedId && savedPseudo) {
       setAuthLoading(true);
       autoLogin(savedId, savedPseudo);
     }
-  }
+  }, []);
 
   async function autoLogin(playerId, pseudo) {
     // Set timeout — if loading takes > 8s on mobile, show retry button
@@ -824,50 +739,44 @@ function LogosChallenge() {
     setAuthTimeout(false);
   }
 
-  async function handleGoogleCallback(accessToken) {
+  // Envoyer le code OTP à l'email
+  async function handleSendOTP() {
+    const emailTrimmed = otpEmail.trim().toLowerCase();
+    if (!emailTrimmed || !emailTrimmed.includes("@")) { setOtpError(t.emailError); return; }
+    setOtpLoading(true); setOtpError("");
     try {
-      const res = await fetch(`${SUPA_URL}/auth/v1/user`, {
-        headers: { "apikey": SUPA_KEY, "Authorization": `Bearer ${accessToken}` }
-      });
-      if (!res.ok) throw new Error("Auth failed");
-      const gUser = await res.json();
-      const email = gUser.email;
-      const name = gUser.user_metadata?.full_name || gUser.user_metadata?.name || email.split("@")[0];
-      const googleId = gUser.id;
-      const gUserData = { email, name, googleId, accessToken };
-      setGoogleUser(gUserData);
-      
-      // SECURITY CHECK 1: Is this Google account already linked to a player?
-      const byGoogleId = await supaFetch(`players?google_id=eq.${googleId}&select=*`);
-      if (byGoogleId && byGoogleId.length > 0) {
-        // Known account — auto login directly, no questions asked
-        await loadPlayerSession(byGoogleId[0]);
-        setAuthLoading(false);
-        return;
-      }
+      await sendOTPCode(emailTrimmed);
+      setOtpSent(true);
+    } catch(e) { setOtpError(lang==="fr"?"Erreur d'envoi. Réessayez.":"Send error. Try again."); }
+    setOtpLoading(false);
+  }
 
-      // SECURITY CHECK 2: Is this email already linked?
-      const byEmail = await supaFetch(`players?email=eq.${encodeURIComponent(email)}&select=*`);
+  // Vérifier le code OTP et connecter/créer le joueur
+  async function handleVerifyOTP() {
+    const emailTrimmed = otpEmail.trim().toLowerCase();
+    setOtpLoading(true); setOtpError("");
+    try {
+      const valid = await verifyOTPCode(emailTrimmed, otpCode);
+      if (!valid) { setOtpError(t.codeError); setOtpLoading(false); return; }
+
+      // RÈGLE : 1 email = 1 pseudo pour toujours
+      const byEmail = await supaFetch(`players?email=eq.${encodeURIComponent(emailTrimmed)}&select=*`);
       if (byEmail && byEmail.length > 0) {
-        // Link google_id to this existing account and login
-        await supaFetch(`players?id=eq.${byEmail[0].id}`, "PATCH", { google_id: googleId });
+        // Email déjà connu → connexion directe, pas de questions
         await loadPlayerSession(byEmail[0]);
-        setAuthLoading(false);
+        setOtpSent(false); setOtpCode(""); setOtpEmail("");
+        setOtpLoading(false);
         return;
       }
 
-      // New player — show pseudo choice / recover form
-      const firstName = name.split(" ")[0].slice(0, 20);
-      setPseudo(firstName);
+      // Nouvel email — afficher le formulaire pseudo
+      setGoogleUser({ email: emailTrimmed, name: "", googleId: null });
       setShowLinkForm(true);
       setRecoverMode(false);
       setRecoverError("");
       setScreen("register");
-    } catch(e) {
-      console.error("Google auth error:", e);
-      setAuthTimeout(true);
-    }
-    setAuthLoading(false);
+    } catch(e) { setOtpError(lang==="fr"?"Erreur. Réessayez.":"Error. Try again."); }
+    setOtpLoading(false);
   }
 
   async function loadPlayerSession(p) {
@@ -877,9 +786,8 @@ function LogosChallenge() {
     if (progress) {
       const lp = {};
       LEVELS.forEach(l => { lp[l.id] = { answeredCount: 0, correctCount: 0, score: 0, done: false }; });
-      const lvl = progress.currentLevel || 1;
-      setDailyProgress({ currentLevel: lvl, levelProgress: {...lp, ...progress.levelProgress}, todayTotalScore: progress.todayTotalScore, totalPoints: progress.totalPoints || 0 });
-      setCurrentMaxLevel(lvl);
+      setDailyProgress({ levelProgress: {...lp, ...progress.levelProgress}, todayTotalScore: progress.todayTotalScore });
+      if (progress.currentLevel) setCurrentMaxLevel(progress.currentLevel);
       if (progress.streak) setPlayerStreak(progress.streak);
       if (progress.badges) setPlayerBadges(progress.badges);
       const rc = await dbGetReferralCount(p.id);
@@ -891,92 +799,45 @@ function LogosChallenge() {
   async function registerWithGoogle() {
     if (!pseudo.trim() || !googleUser) return;
     const pseudoTrimmed = pseudo.trim();
+    const emailTrimmed = googleUser.email;
     setRecoverError("");
     try {
-      // ── RÈGLE ABSOLUE : 1 email Google = 1 pseudo pour toujours ──
-      // Avant toute action, on vérifie si ce compte Google est déjà lié
-      // à un pseudo existant (même après récupération, même après changement d'appareil)
-      const alreadyByGoogleId = await supaFetch(`players?google_id=eq.${googleUser.googleId}&select=id,pseudo`);
-      if (alreadyByGoogleId && alreadyByGoogleId.length > 0) {
-        const linkedPseudo = alreadyByGoogleId[0].pseudo;
-        // Si le pseudo lié est différent de ce qu'il tape → on le connecte directement au bon compte
-        await loadPlayerSession(alreadyByGoogleId[0]);
-        setShowLinkForm(false);
-        setRecoverMode(false);
-        return;
-      }
-      // Vérifier aussi par email
-      const alreadyByEmail = await supaFetch(`players?email=eq.${encodeURIComponent(googleUser.email)}&select=id,pseudo,google_id`);
+      // RÈGLE ABSOLUE : 1 email = 1 pseudo pour toujours
+      const alreadyByEmail = await supaFetch(`players?email=eq.${encodeURIComponent(emailTrimmed)}&select=id,pseudo`);
       if (alreadyByEmail && alreadyByEmail.length > 0) {
-        // Lier le google_id si pas encore fait et connecter
-        if (!alreadyByEmail[0].google_id) {
-          await supaFetch(`players?id=eq.${alreadyByEmail[0].id}`, "PATCH", { google_id: googleUser.googleId });
-        }
         await loadPlayerSession(alreadyByEmail[0]);
-        setShowLinkForm(false);
-        setRecoverMode(false);
-        return;
+        setShowLinkForm(false); setRecoverMode(false); return;
       }
 
       if (recoverMode) {
-        // RECOVER: find player by pseudo
-        let existing = await supaFetch(`players?pseudo=eq.${pseudoTrimmed}&select=id,pseudo,referred_by,google_id,email`);
+        // RÉCUPÉRER un ancien pseudo : vérifier que le pseudo existe
+        let existing = await supaFetch(`players?pseudo=eq.${pseudoTrimmed}&select=id,pseudo,referred_by,email`);
         if (!existing || existing.length === 0) {
-          existing = await supaFetch(`players?pseudo=ilike.${pseudoTrimmed}&select=id,pseudo,referred_by,google_id,email`);
+          existing = await supaFetch(`players?pseudo=ilike.${pseudoTrimmed}&select=id,pseudo,referred_by,email`);
         }
-        if (!existing || existing.length === 0) {
-          setRecoverError(t.recoverNotFound);
-          return;
-        }
+        if (!existing || existing.length === 0) { setRecoverError(t.recoverNotFound); return; }
         const p = existing[0];
-        // SÉCURITÉ : si ce pseudo est déjà lié à un AUTRE compte Google → refuser
-        if (p.google_id && p.google_id !== googleUser.googleId) {
-          setRecoverError(t.pseudoAlreadyLinked);
-          return;
-        }
-        // Lier définitivement ce compte Google à ce pseudo
-        const res = await supaFetch(`players?id=eq.${p.id}`, "PATCH", {
-          google_id: googleUser.googleId,
-          email: googleUser.email
-        });
-        if (res && res.code === "23505") {
-          setRecoverError(lang === "fr"
-            ? "Ce compte Google est déjà lié à un autre pseudo."
-            : "This Google account is already linked to another username.");
-          return;
-        }
-        setShowLinkForm(false);
-        setRecoverMode(false);
+        // Si ce pseudo est déjà lié à un AUTRE email → refuser
+        if (p.email && p.email !== emailTrimmed) { setRecoverError(t.pseudoAlreadyLinked); return; }
+        // Lier l'email définitivement à ce pseudo
+        await supaFetch(`players?id=eq.${p.id}`, "PATCH", { email: emailTrimmed });
+        setShowLinkForm(false); setRecoverMode(false);
         await loadPlayerSession(p);
       } else {
-        // NOUVEAU JOUEUR: vérifier que le pseudo n'est pas déjà pris
-        const taken = await supaFetch(`players?pseudo=eq.${pseudoTrimmed}&select=id,google_id`);
-        if (taken && taken.length > 0 && taken[0].google_id && taken[0].google_id !== googleUser.googleId) {
-          setRecoverError(lang === "fr"
-            ? "Ce pseudo est déjà pris. Choisissez-en un autre."
-            : "This username is taken. Choose another.");
+        // NOUVEAU JOUEUR
+        const taken = await supaFetch(`players?pseudo=eq.${pseudoTrimmed}&select=id,email`);
+        if (taken && taken.length > 0 && taken[0].email && taken[0].email !== emailTrimmed) {
+          setRecoverError(lang==="fr"?"Ce pseudo est déjà pris. Choisissez-en un autre.":"This username is taken. Choose another.");
           return;
         }
         const p = await dbGetOrCreatePlayer(pseudoTrimmed, urlRef);
         if (!p) throw new Error("Erreur création joueur");
-        // Lier google_id + email de façon permanente et unique
-        const res2 = await supaFetch(`players?id=eq.${p.id}`, "PATCH", {
-          google_id: googleUser.googleId,
-          email: googleUser.email
-        });
-        if (res2 && res2.code === "23505") {
-          await supaFetch(`players?id=eq.${p.id}`, "DELETE");
-          setRecoverError(lang === "fr"
-            ? "Ce compte Google est déjà utilisé. Cliquez 'Récupérer mes points'."
-            : "This Google account is already used. Click 'Recover my points'.");
-          return;
-        }
+        // Verrouiller l'email sur ce pseudo — définitif, impossible à changer
+        await supaFetch(`players?id=eq.${p.id}`, "PATCH", { email: emailTrimmed });
         setShowLinkForm(false);
         await loadPlayerSession(p);
       }
-    } catch(e) {
-      console.error("Register with Google error:", e);
-    }
+    } catch(e) { console.error("Register error:", e); }
   }
   const t = T[lang]; // current translations
   const [playerStreak, setPlayerStreak]   = useState(0);
@@ -1059,7 +920,6 @@ function LogosChallenge() {
     try {
       localStorage.removeItem("lc_player_id");
       localStorage.removeItem("lc_pseudo");
-      localStorage.removeItem("lc_google_id");
     } catch(e) {}
     setScreen("home");
   }
@@ -1288,9 +1148,6 @@ function LogosChallenge() {
 
       setPlayer(p);
       if (progress) {
-        const lvl2 = progress.currentLevel || 1;
-        setDailyProgress(prev => ({ ...prev, currentLevel: lvl2, totalPoints: progress.totalPoints || 0 }));
-        setCurrentMaxLevel(lvl2);
         setPlayerStreak(progress.streak || 0);
         setPlayerBadges(progress.badges || []);
       }
@@ -1474,49 +1331,55 @@ const accent  = "#7C6FE0";  // soft indigo accent
 
   if (screen === "register") return (
     <div style={S.app}>
-      <style>{``}</style>
       <div style={{position:"fixed",top:"-20%",left:"50%",transform:"translateX(-50%)",width:700,height:700,background:"radial-gradient(ellipse,rgba(99,202,183,0.06) 0%,transparent 60%)",pointerEvents:"none",zIndex:0,animation:"glowPulse 4s ease-in-out infinite"}}/>
-      <div style={{position:"fixed",bottom:"-10%",right:"-10%",width:500,height:500,background:"radial-gradient(ellipse,rgba(79,172,254,0.04) 0%,transparent 60%)",pointerEvents:"none",zIndex:0}}/>
-      <div style={{position:"fixed",top:"40%",left:"-5%",width:300,height:300,background:"radial-gradient(ellipse,rgba(99,202,183,0.03) 0%,transparent 60%)",pointerEvents:"none",zIndex:0}}/>>
       <div style={S.regC}>
         <div style={{fontSize:50,marginBottom:12,filter:"drop-shadow(0 0 20px rgba(245,200,66,0.3))"}}>✝️</div>
 
-        {/* Step 1 — Google Sign-In only */}
-        {!showLinkForm && (
+        {/* ÉTAPE 1 — Saisie email + envoi code */}
+        {!showLinkForm && !otpSent && (
           <>
             <h2 style={{color:gold,marginBottom:6,fontSize:19}}>{t.registerTitle}</h2>
-            <p style={{color:"#666",fontSize:13,marginBottom:16,lineHeight:1.6}}>{t.registerDesc}</p>
-            <div style={{background:"rgba(255,215,0,0.06)",border:"1px solid rgba(255,215,0,0.15)",borderRadius:10,padding:"10px 14px",marginBottom:20,fontSize:11,color:"#888",lineHeight:1.6}}>
-              🔒 {lang==="fr"
-                ? "Votre compte est sécurisé par Google. Seul le propriétaire du Gmail peut y accéder."
-                : "Your account is secured by Google. Only the Gmail owner can access it."}
-            </div>
-            <button onClick={()=>{ setAuthLoading(true); signInWithGoogle(); }}
-              style={{width:"100%",background:"#fff",border:"none",borderRadius:12,padding:"14px 20px",color:"#333",cursor:"pointer",fontFamily:"inherit",fontSize:15,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:12,marginBottom:16,boxShadow:"0 2px 8px rgba(0,0,0,0.3)"}}>
-              <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-              {t.signInGoogle}
+            <p style={{color:"#666",fontSize:13,marginBottom:20,lineHeight:1.6}}>{t.registerDesc}</p>
+            <input style={S.inp} type="email" placeholder={t.emailPlaceholder} value={otpEmail}
+              onChange={e=>{setOtpEmail(e.target.value); setOtpError("");}}
+              onKeyDown={e=>e.key==="Enter"&&handleSendOTP()}/>
+            {otpError && <p style={{color:"#FF4444",fontSize:12,marginTop:-8,marginBottom:8}}>{otpError}</p>}
+            <button className="btn-primary" style={S.primB} onClick={handleSendOTP} disabled={otpLoading}>
+              {otpLoading ? "⏳ ..." : t.sendCode}
             </button>
             <button style={S.ghstB} onClick={()=>setScreen("home")}>{t.back}</button>
           </>
         )}
 
-        {/* Step 2 — After Google auth: new pseudo OR recover old account */}
+        {/* ÉTAPE 2 — Saisie du code OTP */}
+        {!showLinkForm && otpSent && (
+          <>
+            <h2 style={{color:gold,marginBottom:6,fontSize:17}}>{t.enterCode}</h2>
+            <p style={{color:"#888",fontSize:12,marginBottom:16,textAlign:"center"}}>{t.codeSent}<strong style={{color:"#63CAB7"}}>{otpEmail}</strong></p>
+            <input style={{...S.inp, textAlign:"center", fontSize:22, letterSpacing:6}} type="text"
+              placeholder={t.codePlaceholder} value={otpCode} maxLength={6}
+              onChange={e=>{setOtpCode(e.target.value.replace(/\D/g,"")); setOtpError("");}}
+              onKeyDown={e=>e.key==="Enter"&&handleVerifyOTP()}/>
+            {otpError && <p style={{color:"#FF4444",fontSize:12,marginTop:-8,marginBottom:8}}>{otpError}</p>}
+            <button className="btn-primary" style={S.primB} onClick={handleVerifyOTP} disabled={otpLoading}>
+              {otpLoading ? "⏳ ..." : t.verifyCode}
+            </button>
+            <button style={S.ghstB} onClick={()=>{setOtpSent(false);setOtpCode("");setOtpError("");}}>← {t.back}</button>
+          </>
+        )}
+
+        {/* ÉTAPE 3 — Choisir pseudo (nouvel utilisateur) */}
         {showLinkForm && googleUser && (
           <>
             <p style={{color:"#AAA",fontSize:12,marginBottom:4,textAlign:"center"}}>✅ {googleUser.email}</p>
-
             {!recoverMode ? (
               <>
                 <h2 style={{color:gold,marginBottom:6,fontSize:17}}>{t.choosePseudo}</h2>
                 <input style={S.inp} placeholder={t.pseudoPlaceholder} value={pseudo}
                   onChange={e=>{setPseudo(e.target.value); setRecoverError("");}}
                   maxLength={20} onKeyDown={e=>e.key==="Enter"&&registerWithGoogle()}/>
+                {recoverError && <p style={{color:"#FF4444",fontSize:12,marginTop:-8,marginBottom:8}}>{recoverError}</p>}
                 <button className="btn-primary" style={S.primB} onClick={registerWithGoogle}>{t.startAdventure}</button>
-                <div style={{margin:"12px 0",display:"flex",alignItems:"center",gap:8,width:"100%"}}>
-                  <div style={{flex:1,height:1,background:"rgba(255,255,255,0.08)"}}/>
-                  <span style={{color:"#555",fontSize:11}}>─</span>
-                  <div style={{flex:1,height:1,background:"rgba(255,255,255,0.08)"}}/>
-                </div>
                 <button style={S.ghstB} onClick={()=>{setRecoverMode(true); setPseudo(""); setRecoverError("");}}>
                   🔄 {t.recoverTitle}
                 </button>
@@ -1531,7 +1394,7 @@ const accent  = "#7C6FE0";  // soft indigo accent
                   maxLength={20} onKeyDown={e=>e.key==="Enter"&&registerWithGoogle()}/>
                 {recoverError && <p style={{color:"#FF4444",fontSize:12,marginTop:-8,marginBottom:8}}>{recoverError}</p>}
                 <button className="btn-primary" style={S.primB} onClick={registerWithGoogle}>{t.recoverBtn}</button>
-                <button style={S.ghstB} onClick={()=>{setRecoverMode(false); setPseudo(googleUser.name?.split(" ")[0]||""); setRecoverError("");}}>
+                <button style={S.ghstB} onClick={()=>{setRecoverMode(false); setPseudo(""); setRecoverError("");}}>
                   ← {t.recoverSkip}
                 </button>
               </>
@@ -2169,7 +2032,7 @@ const accent  = "#7C6FE0";  // soft indigo accent
               </div>
             </>
           ) : (
-            <button onClick={()=>{ setAuthLoading(true); signInWithGoogle(); }} style={{...S.joinB, display:"flex", alignItems:"center", gap:6}}>
+            <button onClick={()=>{ setAuthLoading(true); window.location.href=`${SUPA_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent("https://logoschallenge.vercel.app")}`; }} style={{...S.joinB, display:"flex", alignItems:"center", gap:6}}>
               <svg width="14" height="14" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
               {t.join}
             </button>
@@ -2211,7 +2074,7 @@ const accent  = "#7C6FE0";  // soft indigo accent
 
         {LEVELS.map(lvl => {
           const lp         = dp.levelProgress[lvl.id] || { answeredCount:0, score:0, done:false };
-          const isUnlocked = lvl.id <= dp.currentLevel;
+          const isUnlocked = lvl.id <= (dp.currentLevel || 1);
           const isDone     = lp.done;
           const isActive   = lvl.id === dp.currentLevel && !isDone;
           const pct        = isDone ? 100 : (lp.answeredCount / lvl.questionsPerDay * 100);
@@ -2231,7 +2094,7 @@ const accent  = "#7C6FE0";  // soft indigo accent
 
           return (
             <div key={lvl.id} className={`level-card ${isActive?"active-level":""}`} style={{...S.lvlSt, background:bgColor, borderColor, opacity:isUnlocked?1:0.3, cursor}}
-              onClick={()=>{ if(!isUnlocked||isDone||isBlocked) return; if(!player && lvl.id > 1){setScreen("register");return;} if(!player && lvl.id === 1){ startLevel(lvl.id); return; } startLevel(lvl.id); }}>
+              onClick={()=>{ if(!isUnlocked||isDone||isBlocked) return; if(!player){setScreen("register");return;} startLevel(lvl.id); }}>
               <span style={S.stIco}>{lvl.emoji}</span>
               <div style={S.stInf}>
                 <div style={S.stNm}>Niv.{lvl.id} — {lvl.name}</div>
