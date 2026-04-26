@@ -486,30 +486,36 @@ async function supaFetch(path, method = "GET", body = null) {
 // AUTH PAR EMAIL OTP — utilise Supabase Auth natif (pas d'Edge Function)
 // ─────────────────────────────────────────────────────────────
 
-// Envoie un code OTP via notre API Vercel (pas de CORS, pas de navigateur)
+// Envoie un code OTP via Supabase Auth natif
 async function sendOTPCode(email) {
-  const res = await fetch("/api/send-otp", {
+  const res = await fetch(`${SUPA_URL}/auth/v1/otp`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
+    headers: {
+      "Content-Type": "application/json",
+      "apikey": SUPA_KEY,
+    },
+    body: JSON.stringify({ email, create_user: true }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || "Erreur envoi");
+    throw new Error(err.msg || "Erreur envoi");
   }
   return true;
 }
 
-// Vérifie le code OTP via notre API Vercel
+// Vérifie le code OTP via Supabase Auth natif
 async function verifyOTPCode(email, inputCode) {
-  const res = await fetch("/api/verify-otp", {
+  const res = await fetch(`${SUPA_URL}/auth/v1/verify`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, code: inputCode.trim() }),
+    headers: {
+      "Content-Type": "application/json",
+      "apikey": SUPA_KEY,
+    },
+    body: JSON.stringify({ type: "email", email, token: inputCode.trim() }),
   });
   if (!res.ok) return false;
   const data = await res.json().catch(() => ({}));
-  return data.valid === true;
+  return !!data.access_token;
 }
 
 async function dbGetOrCreatePlayer(pseudo, referredBy = null) {
