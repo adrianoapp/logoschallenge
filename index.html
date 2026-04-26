@@ -559,7 +559,8 @@ async function dbGetScore(playerId) {
 const today = () => new Date().toISOString().split("T")[0];
 
 // Save/update score
-async function dbSaveScore(playerId, pseudo, dailyPts, totalPts, currentLevel) {
+async function dbSaveScore(playerId, pseudo, dailyPts, currentLevel) {
+  // NOTE: on ne reçoit plus totalPts depuis le front — on calcule en base
   const existing = await dbGetScore(playerId);
   const todayStr = today();
 
@@ -567,7 +568,7 @@ async function dbSaveScore(playerId, pseudo, dailyPts, totalPts, currentLevel) {
     return supaFetch("scores", "POST", {
       player_id: playerId, pseudo,
       daily_points: dailyPts,
-      total_points: totalPts,
+      total_points: dailyPts,  // premier jour = daily = total
       current_level: currentLevel,
       last_played: todayStr,
       streak: 1,
@@ -584,18 +585,12 @@ async function dbSaveScore(playerId, pseudo, dailyPts, totalPts, currentLevel) {
   const newStreak = isNewDay ? (isConsecutive ? (existing.streak||0)+1 : 1) : (existing.streak||1);
   const newGamesPlayed = isNewDay ? (existing.games_played||0)+1 : (existing.games_played||1);
 
-  // ✅ FIX CLASSEMENT MONDIAL — total_points = cumul réel
-  // Si nouveau jour : on ajoute les points du jour aux points historiques
-  // Si même jour : on prend le max entre l'ancien total et le nouveau
+  // ✅ CALCUL TOTAL EN BASE — jamais depuis le front (front peut avoir totalPoints=0)
+  // Nouveau jour  → total historique + points du jour
+  // Même jour     → total historique - anciens pts du jour + nouveaux pts du jour
   const prevTotal = existing.total_points || 0;
-  const prevDaily = existing.daily_points || 0;
-  const newTotalPoints = isNewDay
-    ? prevTotal + dailyPts                        // nouveau jour → on additionne
-    : prevTotal - prevDaily + dailyPts;           // même jour → on remplace les pts du jour
-
-  // ✅ FIX NIVEAUX JOURNALIERS — current_level repart à 1 chaque nouveau jour
-  // Dans la journée, on garde le niveau atteint pour pouvoir continuer
-  const newCurrentLevel = isNewDay ? currentLevel : currentLevel;
+  const prevDaily = isNewDay ? 0 : (existing.daily_points || 0);
+  const newTotalPoints = prevTotal - prevDaily + dailyPts;
 
   // Compute badges
   const stats = { streak: newStreak, totalPoints: newTotalPoints, highestLevel: currentLevel, gamesPlayed: newGamesPlayed };
@@ -604,7 +599,7 @@ async function dbSaveScore(playerId, pseudo, dailyPts, totalPts, currentLevel) {
   return supaFetch(`scores?player_id=eq.${playerId}`, "PATCH", {
     daily_points: dailyPts,
     total_points: newTotalPoints,
-    current_level: currentLevel,   // niveau atteint aujourd'hui
+    current_level: currentLevel,
     last_played: todayStr,
     streak: newStreak,
     games_played: newGamesPlayed,
@@ -1136,7 +1131,7 @@ function LogosChallenge() {
     if (player) {
       setSaving(true);
       try {
-        await dbSaveScore(player.id, player.pseudo, newTodayScore, newTotalPoints, newCurrentLevel);
+        await dbSaveScore(player.id, player.pseudo, newTodayScore, newCurrentLevel);
         const updatedScore = await dbGetPlayerProgress(player.id);
         if (updatedScore) {
           const oldBadgeIds = playerBadges;
