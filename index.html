@@ -632,8 +632,24 @@ async function dbGetPlayerProgress(playerId) {
   const score = await dbGetScore(playerId);
   if (!score) return null;
   const isNewDay = score.last_played !== todayStr;
+  const currentLevel = score.current_level || 1;
+
+  // ✅ FIX BUG 2b : reconstruire levelProgress depuis current_level
+  // Tous les niveaux AVANT currentLevel sont marqués comme "done"
+  // Le niveau actuel est en cours, les suivants sont verrouillés
+  const levelProgress = {};
+  LEVELS.forEach(l => {
+    if (l.id < currentLevel) {
+      // Niveau déjà complété
+      levelProgress[l.id] = { answeredCount: l.questionsPerDay, correctCount: l.minToPass, score: 0, done: true };
+    } else {
+      levelProgress[l.id] = { answeredCount: 0, correctCount: 0, score: 0, done: false };
+    }
+  });
+
   return {
-    currentLevel: score.current_level || 1,
+    currentLevel,
+    levelProgress,
     todayTotalScore: isNewDay ? 0 : score.daily_points,
     totalPoints: score.total_points || 0,
     streak: score.streak || 0,
@@ -795,7 +811,14 @@ function LogosChallenge() {
     if (progress) {
       const lp = {};
       LEVELS.forEach(l => { lp[l.id] = { answeredCount: 0, correctCount: 0, score: 0, done: false }; });
-      setDailyProgress({ levelProgress: {...lp, ...progress.levelProgress}, todayTotalScore: progress.todayTotalScore });
+      // ✅ FIX BUG 2 : currentLevel EST inclus dans dailyProgress
+      // Sans ça, dp.currentLevel = undefined → tous les niveaux semblent verrouillés au niveau 1
+      setDailyProgress({
+        currentLevel: progress.currentLevel || 1,
+        levelProgress: {...lp, ...progress.levelProgress},
+        todayTotalScore: progress.todayTotalScore,
+        totalPoints: progress.totalPoints || 0,
+      });
       if (progress.currentLevel) setCurrentMaxLevel(progress.currentLevel);
       if (progress.streak) setPlayerStreak(progress.streak);
       if (progress.badges) setPlayerBadges(progress.badges);
@@ -953,7 +976,7 @@ function LogosChallenge() {
 
   useEffect(() => {
     refreshLeaderboard();
-    const iv = setInterval(refreshLeaderboard, 10000);
+    const iv = setInterval(refreshLeaderboard, 8000);
     return () => clearInterval(iv);
   }, []);
 
