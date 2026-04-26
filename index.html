@@ -583,15 +583,28 @@ async function dbSaveScore(playerId, pseudo, dailyPts, totalPts, currentLevel) {
   const isConsecutive = existing.last_played === yesterdayStr;
   const newStreak = isNewDay ? (isConsecutive ? (existing.streak||0)+1 : 1) : (existing.streak||1);
   const newGamesPlayed = isNewDay ? (existing.games_played||0)+1 : (existing.games_played||1);
-  
+
+  // ✅ FIX CLASSEMENT MONDIAL — total_points = cumul réel
+  // Si nouveau jour : on ajoute les points du jour aux points historiques
+  // Si même jour : on prend le max entre l'ancien total et le nouveau
+  const prevTotal = existing.total_points || 0;
+  const prevDaily = existing.daily_points || 0;
+  const newTotalPoints = isNewDay
+    ? prevTotal + dailyPts                        // nouveau jour → on additionne
+    : prevTotal - prevDaily + dailyPts;           // même jour → on remplace les pts du jour
+
+  // ✅ FIX NIVEAUX JOURNALIERS — current_level repart à 1 chaque nouveau jour
+  // Dans la journée, on garde le niveau atteint pour pouvoir continuer
+  const newCurrentLevel = isNewDay ? currentLevel : currentLevel;
+
   // Compute badges
-  const stats = { streak: newStreak, totalPoints: totalPts, highestLevel: currentLevel, gamesPlayed: newGamesPlayed };
+  const stats = { streak: newStreak, totalPoints: newTotalPoints, highestLevel: currentLevel, gamesPlayed: newGamesPlayed };
   const earnedBadges = computeBadges(stats).map(b => b.id);
 
   return supaFetch(`scores?player_id=eq.${playerId}`, "PATCH", {
     daily_points: dailyPts,
-    total_points: totalPts,
-    current_level: currentLevel,
+    total_points: newTotalPoints,
+    current_level: currentLevel,   // niveau atteint aujourd'hui
     last_played: todayStr,
     streak: newStreak,
     games_played: newGamesPlayed,
@@ -632,15 +645,20 @@ async function dbGetPlayerProgress(playerId) {
   const score = await dbGetScore(playerId);
   if (!score) return null;
   const isNewDay = score.last_played !== todayStr;
-  const currentLevel = score.current_level || 1;
 
-  // ✅ FIX BUG 2b : reconstruire levelProgress depuis current_level
-  // Tous les niveaux AVANT currentLevel sont marqués comme "done"
-  // Le niveau actuel est en cours, les suivants sont verrouillés
+  // ✅ FIX NIVEAUX JOURNALIERS
+  // Nouveau jour → tout le monde repart au niveau 1
+  // Même jour → on reprend le niveau atteint (pour continuer en cours de journée)
+  const currentLevel = isNewDay ? 1 : (score.current_level || 1);
+
+  // Reconstruire levelProgress :
+  // - Niveaux AVANT currentLevel = done (débloqués et validés aujourd'hui)
+  // - Niveau ACTUEL = en cours
+  // - Niveaux APRÈS = verrouillés
   const levelProgress = {};
   LEVELS.forEach(l => {
     if (l.id < currentLevel) {
-      // Niveau déjà complété
+      // Validé aujourd'hui
       levelProgress[l.id] = { answeredCount: l.questionsPerDay, correctCount: l.minToPass, score: 0, done: true };
     } else {
       levelProgress[l.id] = { answeredCount: 0, correctCount: 0, score: 0, done: false };
