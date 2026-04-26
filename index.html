@@ -953,7 +953,7 @@ function LogosChallenge() {
 
   useEffect(() => {
     refreshLeaderboard();
-    const iv = setInterval(refreshLeaderboard, 30000);
+    const iv = setInterval(refreshLeaderboard, 10000);
     return () => clearInterval(iv);
   }, []);
 
@@ -1119,6 +1119,12 @@ function LogosChallenge() {
       // Track attempt
       const currentAttempts = (levelAttempts[activeLevel] || 0) + 1;
       setLevelAttempts(prev => ({ ...prev, [activeLevel]: currentAttempts }));
+      if (passed) {
+        setDailyProgress(prev => ({
+          ...prev,
+          currentLevel: Math.max(prev.currentLevel || 1, newCurrentLevel),
+        }));
+      }
       setScreen(passed ? "levelComplete" : currentAttempts >= 2 ? "levelBlocked" : "levelFailed");
       return;
     }
@@ -2086,7 +2092,7 @@ const accent  = "#7C6FE0";  // soft indigo accent
         {LEVELS.map(lvl => {
           const lp         = dp.levelProgress[lvl.id] || { answeredCount:0, score:0, done:false };
           const isUnlocked = lvl.id <= (dp.currentLevel || 1);
-          const isDone     = lp.done;
+          const isDone     = lp.done || lvl.id < (dp.currentLevel || 1);
           const isActive   = lvl.id === dp.currentLevel && !isDone;
           const pct        = isDone ? 100 : (lp.answeredCount / lvl.questionsPerDay * 100);
 
@@ -2105,7 +2111,7 @@ const accent  = "#7C6FE0";  // soft indigo accent
 
           return (
             <div key={lvl.id} className={`level-card ${isActive?"active-level":""}`} style={{...S.lvlSt, background:bgColor, borderColor, opacity:isUnlocked?1:0.3, cursor}}
-              onClick={()=>{ if(!isUnlocked||isDone||isBlocked) return; if(!player){setScreen("register");return;} startLevel(lvl.id); }}>
+              onClick={()=>{ if(!isUnlocked||isDone||isBlocked) return; if(!player){setScreen("register");return;} if(isDone) return; startLevel(lvl.id); }}>
               <span style={S.stIco}>{lvl.emoji}</span>
               <div style={S.stInf}>
                 <div style={S.stNm}>Niv.{lvl.id} — {lvl.name}</div>
